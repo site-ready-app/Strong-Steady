@@ -1,0 +1,9 @@
+{
+  "appId": "io.github.sitereadyapp.strongsteady",
+  "appName": "Strong & Steady",
+  "webDir": "docs",
+  "android": {
+    "allowMixedContent": false,
+    "backgroundColor": "#faf6ee"
+  }
+}

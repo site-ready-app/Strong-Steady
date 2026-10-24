@@ -1,0 +1,82 @@
+name: Build the Android app
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Build the app's screens
+        run: python3 tools/build_web.py
+
+      - name: Create the Android project
+        run: |
+          npm install --no-audit --no-fund
+          npx cap add android
+          node tools/patch_android.js
+          npx cap sync android
+
+      - name: Use the signing key (if it has been added to the repository's secrets)
+        env:
+          KS: ${{ secrets.STEADY_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KS" ]; then
+            echo "$KS" | base64 -d > "$RUNNER_TEMP/upload.jks"
+            echo "STEADY_KEYSTORE=$RUNNER_TEMP/upload.jks" >> "$GITHUB_ENV"
+            echo "Signing with the upload key"
+          else
+            echo "No signing key yet: building a test (debug) version only"
+          fi
+
+      - name: Build
+        env:
+          STEADY_STORE_PW: ${{ secrets.STEADY_KEY_PASSWORD }}
+          STEADY_KEY_PW: ${{ secrets.STEADY_KEY_PASSWORD }}
+          STEADY_KEY_ALIAS: upload
+        run: |
+          cd android
+          chmod +x gradlew
+          if [ -n "$STEADY_KEYSTORE" ]; then
+            ./gradlew --no-daemon assembleRelease bundleRelease
+            cp app/build/outputs/apk/release/app-release.apk ../strong-steady.apk
+            cp app/build/outputs/bundle/release/app-release.aab ../strong-steady.aab
+          else
+            ./gradlew --no-daemon assembleDebug
+            cp app/build/outputs/apk/debug/app-debug.apk ../strong-steady.apk
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: strong-steady-${{ github.run_number }}
+          path: |
+            strong-steady.apk
+            strong-steady.aab
+          if-no-files-found: ignore
+
+      - name: Publish a download link (Releases page)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          V=$(node -p "require('./package.json').version")
+          TAG="v$V-build${{ github.run_number }}"
+          FILES="strong-steady.apk"
+          [ -f strong-steady.aab ] && FILES="$FILES strong-steady.aab"
+          gh release create "$TAG" $FILES --title "Strong & Steady $V (build ${{ github.run_number }})" \
+            --notes "Download strong-steady.apk on the Android phone to install or update." --latest

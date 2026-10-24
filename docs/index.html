@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en-GB" data-theme="teal" data-size="L" data-mode="auto">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Strong &amp; Steady</title>
+<meta name="theme-color" content="#0e5a57">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Steady">
+<script>window.SITE_BUILD="3e2420a73e72";</script>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+  <div id="shell" hidden>
+    <div class="top">
+      <div class="brand">Strong &amp; Steady</div>
+      <span class="chip" id="chip-streak" title="Days in a row">🔥 0</span>
+      <span class="chip" id="chip-rank">Starter</span>
+      <button class="chip" id="gear" aria-label="Settings and help">⚙️</button>
+    </div>
+    <nav class="tabs" id="tabs">
+      <button data-tab="today"><span class="i">☀️</span>Today</button>
+      <button data-tab="exercise"><span class="i">🤸</span>Exercise</button>
+      <button data-tab="journey"><span class="i">🗺️</span>Journey</button>
+      <button data-tab="games"><span class="i">🎮</span>Games</button>
+      <button data-tab="progress"><span class="i">🏆</span>Progress</button>
+    </nav>
+    <main id="view"></main>
+  </div>
+  <main id="full" hidden></main>
+</div>
+<div id="layer"></div>
+<canvas id="confetti" hidden></canvas>
+<script src="data.js"></script>
+<script src="words.js"></script>
+<script src="games.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

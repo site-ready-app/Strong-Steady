@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Notification icon: a figure with arms raised (white silhouette; Android tints it). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+  <path android:fillColor="#FFFFFFFF" android:pathData="M12,2.2l0.9,1.9 2.1,0.3 -1.5,1.4 0.4,2.1 -1.9,-1 -1.9,1 0.4,-2.1 -1.5,-1.4 2.1,-0.3z"/>
+  <path android:fillColor="#FFFFFFFF" android:pathData="M12,8.6a1.5,1.5 0,1 1,0 3a1.5,1.5 0,1 1,0 -3z"/>
+  <path android:strokeColor="#FFFFFFFF" android:strokeWidth="1.6" android:strokeLineCap="round" android:pathData="M12,12.4V17.2M12,13.2L8.2,10.2M12,13.2L15.8,10.2M12,17.2L9.8,21.4M12,17.2L14.2,21.4"/>
+</vector>

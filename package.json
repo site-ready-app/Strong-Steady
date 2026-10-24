@@ -1,0 +1,13 @@
+{
+  "name": "strong-steady",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Strong & Steady: gentle guided exercise for older adults, with stars, streaks, treats and a walking journey.",
+  "dependencies": {
+    "@capacitor/android": "8.5.3",
+    "@capacitor/core": "8.5.3"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.5.3"
+  }
+}
