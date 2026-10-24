@@ -53,12 +53,21 @@ jobs:
         run: |
           cd android
           chmod +x gradlew
+          if [ -n "$STEADY_KEYSTORE" ]; then TASKS="assembleRelease bundleRelease"; else TASKS="assembleDebug"; fi
+          set +e
+          ./gradlew --no-daemon $TASKS > ../gradle.log 2>&1
+          RC=$?
+          set -e
+          tail -40 ../gradle.log
+          if [ $RC -ne 0 ]; then
+            # Report the errors as annotations (readable without downloading the log)
+            grep -E "error:|\.java:[0-9]+|What went wrong|FAILURE|Could not|> " ../gradle.log | grep -v "^> Task" | head -45 | sed 's/%/%25/g' | while IFS= read -r line; do echo "::error::$line"; done
+            exit 1
+          fi
           if [ -n "$STEADY_KEYSTORE" ]; then
-            ./gradlew --no-daemon assembleRelease bundleRelease
             cp app/build/outputs/apk/release/app-release.apk ../strong-steady.apk
             cp app/build/outputs/bundle/release/app-release.aab ../strong-steady.aab
           else
-            ./gradlew --no-daemon assembleDebug
             cp app/build/outputs/apk/debug/app-debug.apk ../strong-steady.apk
           fi
 
