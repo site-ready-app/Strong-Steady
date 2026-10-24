@@ -53,6 +53,10 @@ jobs:
         run: |
           cd android
           chmod +x gradlew
+          # ignore stray spaces or line breaks picked up when the password was pasted into GitHub
+          export STEADY_STORE_PW="$(printf '%s' "$STEADY_STORE_PW" | tr -d '\r\n\t ')"
+          export STEADY_KEY_PW="$STEADY_STORE_PW"
+          echo "Password length: ${#STEADY_STORE_PW} characters (should be 24)"
           if [ -n "$STEADY_KEYSTORE" ]; then TASKS="assembleRelease bundleRelease"; else TASKS="assembleDebug"; fi
           set +e
           ./gradlew --no-daemon $TASKS > ../gradle.log 2>&1
