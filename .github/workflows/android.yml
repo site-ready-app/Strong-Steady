@@ -36,28 +36,31 @@ jobs:
       - name: Use the signing key (if it has been added to the repository's secrets)
         env:
           KS: ${{ secrets.STEADY_KEYSTORE_B64 }}
+          PW_OLD: ${{ secrets.STEADY_KEY_PASSWORD }}
         run: |
+          # One secret holds "password:key". (An older separate password secret also still works.)
+          KS="$(printf '%s' "$KS" | tr -d '\r\n\t ')"
           if [ -n "$KS" ]; then
-            echo "$KS" | base64 -d > "$RUNNER_TEMP/upload.jks"
+            case "$KS" in
+              *:*) PW="${KS%%:*}"; KS="${KS#*:}" ;;
+              *)   PW="$(printf '%s' "$PW_OLD" | tr -d '\r\n\t ')" ;;
+            esac
+            printf '%s' "$KS" | base64 -d > "$RUNNER_TEMP/upload.jks"
+            echo "::add-mask::$PW"
             echo "STEADY_KEYSTORE=$RUNNER_TEMP/upload.jks" >> "$GITHUB_ENV"
-            echo "Signing with the upload key"
+            echo "STEADY_STORE_PW=$PW" >> "$GITHUB_ENV"
+            echo "STEADY_KEY_PW=$PW" >> "$GITHUB_ENV"
+            echo "::notice::Signing key found; password is ${#PW} characters (should be 24)."
           else
-            echo "No signing key yet: building a test (debug) version only"
+            echo "::notice::No signing key yet: building a test (debug) version only"
           fi
 
       - name: Build
         env:
-          STEADY_STORE_PW: ${{ secrets.STEADY_KEY_PASSWORD }}
-          STEADY_KEY_PW: ${{ secrets.STEADY_KEY_PASSWORD }}
           STEADY_KEY_ALIAS: upload
-          KSLEN: ${{ secrets.STEADY_KEYSTORE_B64 != '' && 'present' || 'missing' }}
         run: |
           cd android
           chmod +x gradlew
-          # ignore stray spaces or line breaks picked up when the password was pasted into GitHub
-          export STEADY_STORE_PW="$(printf '%s' "$STEADY_STORE_PW" | tr -d '\r\n\t ')"
-          export STEADY_KEY_PW="$STEADY_STORE_PW"
-          echo "::notice::Signing password received: ${#STEADY_STORE_PW} characters (it should be 24). Keystore secret: $KSLEN."
           if [ -n "$STEADY_KEYSTORE" ]; then TASKS="assembleRelease bundleRelease"; else TASKS="assembleDebug"; fi
           set +e
           ./gradlew --no-daemon $TASKS > ../gradle.log 2>&1
