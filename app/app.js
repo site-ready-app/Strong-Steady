@@ -1,7 +1,7 @@
 /* Strong & Steady — app logic. Runs as an Android app (Capacitor, with the native "Steady" plugin
    for steps, reminders, speech and sharing) and as a plain offline web app (manual activity logging). */
 "use strict";
-window.APP_VERSION="1.1";
+window.APP_VERSION="1.2";
 
 /* ================= utilities ================= */
 const $=s=>document.querySelector(s);
@@ -269,10 +269,28 @@ function renderAll(){
 document.getElementById("gear").onclick=()=>{TAB="more";renderAll();window.scrollTo(0,0)};
 document.getElementById("tabs").addEventListener("click",e=>{const b=e.target.closest("button[data-tab]");if(!b)return;TAB=b.dataset.tab;renderAll();window.scrollTo(0,0)});
 
-function starsHTML(d){const s=dayStars(d),stp=S.steps[d]||0;
-  const w=[[s.move,"👟","Move",S.stepsSource?fmt(stp)+" / "+fmt(S.stepGoal):"Walk 15 min"],[s.strength,"💪","Strength","Strength or chair"],[s.steady,"⚖️","Steady","Balance or stretch"]];
-  return `<div class="stars">${w.map(([on,e,n,sub])=>`<div class="star ${on?"on":""}"><div class="s">⭐</div>${e} ${n}<span class="w">${on?"Earned":esc(sub)}</span></div>`).join("")}</div>`}
-
+function starsHTML(d){const s=dayStars(d),stp=S.steps[d]||0,wm=walkMin(d);
+  const moveSub=S.stepsSource?fmt(stp)+" of "+fmt(S.stepGoal)+" steps"+(wm?" · "+wm+" min walked":""):(wm?wm+" of 15 min":"Walk 15 min");
+  const w=[["move",s.move,"👟","Move",moveSub],["strength",s.strength,"💪","Strength","Strength or chair"],["steady",s.steady,"⚖️","Steady","Balance or stretch"]];
+  return `<div class="stars">${w.map(([k,on,e,n,sub])=>`<button class="star ${on?"on":""}" data-star="${k}" aria-label="${n} star: ${on?"earned":"not yet"}. Tap for details"><div class="s">⭐</div>${e} ${n}<span class="w">${on?"✓ "+(k==="move"?esc(sub):"Earned"):esc(sub)}</span></button>`).join("")}</div>`}
+async function stepsPanel(){
+  const t=dk();let st=null;if(native.ok){st=await native.status();await refreshSteps(true)}
+  const stp=S.steps[t]||0,wm=walkMin(t),left=Math.max(0,S.stepGoal-stp),when=S.stepsAt?new Date(S.stepsAt).toLocaleTimeString("en-GB",{hour:"numeric",minute:"2-digit"}):null;
+  let h=`<div class="dialog plain"><h2>👟 Your Move star</h2>`;
+  if(native.ok&&st&&st.steps){h+=`<div class="big" style="font-size:2.6em">${fmt(stp)}</div><p class="sub">steps today${when?" (checked at "+when+")":""}</p>
+    <div class="bar" style="margin:10px 0"><i style="width:${Math.min(100,Math.round(stp/S.stepGoal*100))}%"></i></div>
+    <p>${dayStars(t).move?"You've earned your Move star today. Well done!":"Your goal is "+fmt(S.stepGoal)+" steps: "+fmt(left)+" to go. A walk of 15 minutes or more also earns the star."}</p>
+    <p class="small muted">Steps are counted while the phone is with you, in a pocket, bag or hand. Walks without the phone can be added below.</p>`}
+  else if(native.ok&&st&&!st.sensor){h+=`<p>This phone doesn't have a step counter, so walks are added by hand instead. 15 minutes earns the Move star.</p>`}
+  else if(native.ok){h+=`<p>Step counting isn't switched on yet.</p><button class="btn" id="sp-allow">Allow step counting</button><p class="small muted" style="margin-top:8px">If nothing happens, open the phone's Settings → Apps → Strong &amp; Steady → Permissions → Physical activity → Allow.</p>`}
+  else h+=`<p>On this device, walks are added by hand. 15 minutes earns the Move star.</p>`;
+  if(wm)h+=`<p><b>Walks and activity logged today: ${wm} minutes.</b></p>`;
+  h+=`<div class="stack" style="margin-top:12px"><button class="btn soft" id="sp-walk">➕ Add a walk or other activity</button>${native.ok&&st&&st.steps?`<button class="btn soft" id="sp-refresh">↻ Check my steps again</button>`:""}<button class="btn ghost" id="sp-x">Close</button></div></div>`;
+  openLayer(h);
+  $("#sp-x").onclick=closeLayer;$("#sp-walk").onclick=logWalk;
+  const r=$("#sp-refresh");if(r)r.onclick=()=>stepsPanel();
+  const a=$("#sp-allow");if(a)a.onclick=async()=>{const ok=await native.requestSteps();if(ok){S.stepsSource="phone";save()}stepsPanel()};
+}
 function todayView(){
   const t=dk(),en=encouragement(),sug=suggestRoutine(),st=streak(),wk=weekStats(),ns=nextStop(),ill=isIll(t),rk=rank();
   let h=`<h1>${esc(en.hi)}</h1><div class="card ${starCount(t)===3?"gold":"hero"}"><p style="margin-top:0"><b>${esc(en.msg)}</b></p>${starsHTML(t)}`;
@@ -283,7 +301,7 @@ function todayView(){
   else if(!dayStars(t).move){h+=`<button class="btn" id="logw">👟 I've been for a walk</button>`}
   else h+=`<button class="btn soft" data-go="mix">Fancy a bonus Quick mix?</button>`;
   h+=`</div>`;
-  if(!ill&&sug&&!dayStars(t).move)h+=`<button class="btn soft" id="logw" style="margin-bottom:14px">👟 Log a walk or other activity</button>`;
+  if(!ill&&(sug||dayStars(t).move))h+=`<button class="btn soft" id="logw" style="margin-bottom:14px">👟 Add a walk or other activity</button>`;
   h+=gamesToday()?`<button class="btn gold" id="gogames" style="margin-bottom:14px">🎮 Games unlocked: play now</button>`:`<div class="card"><b>🎮 Games are locked today.</b> <span class="muted">Do any exercise session to unlock them.</span></div>`;
   if(due())h+=`<div class="card"><h3>📋 Your monthly check-up is due</h3><p>Three quick tests that show how much stronger and steadier you're getting.</p><button class="btn soft" id="chk">Do my check-up</button></div>`;
   h+=`<div class="tiles"><div class="tile"><b>🔥 ${st}</b><span>day${st===1?"":"s"} in a row</span></div>
@@ -302,6 +320,11 @@ function todayView(){
   const gn=$("#gentle");if(gn)gn.onclick=()=>startRoutine("gentle");
   const ck=$("#chk");if(ck)ck.onclick=()=>checkup();
   const gg=$("#gogames");if(gg)gg.onclick=()=>{TAB="games";renderAll()};
+  $("#view").querySelectorAll("[data-star]").forEach(b=>b.onclick=()=>{const k=b.dataset.star;
+    if(k==="move")return stepsPanel();
+    const rid=k==="strength"?(S.seated?"chair":"strength"):(S.seated?"flex":"balance");
+    if(dayStars(dk())[k]){toast("You've already earned this star today. Well done!");return}
+    confirmBox(R(rid).name,"Start "+R(rid).name+" now? It takes about "+planMinutes(rid)+" minutes.","▶ Start","Not now",()=>startRoutine(rid))});
 }
 const ICON={strength:"💪",balance:"⚖️",chair:"🪑",flex:"🙆",mix:"✨",gentle:"🌿"};
 function exerciseView(){
@@ -695,12 +718,12 @@ function setupView(step){
 }
 
 /* ================= steps refresh ================= */
-async function refreshSteps(){
+async function refreshSteps(quiet){
   if(!native.ok||!S.setup)return;
   const r=await native.steps();if(!r||!r.days)return;
-  let changed=false;Object.entries(r.days).forEach(([d,n])=>{if((S.steps[d]||0)!==n){S.steps[d]=n;changed=true}});
-  if(r.available)S.stepsSource="phone";
-  if(changed){save();if(!P&&!showing){renderAll();evaluate()}}
+  let changed=false;Object.entries(r.days).forEach(([d,n])=>{n=+n||0;if(n>(S.steps[d]||0)){S.steps[d]=n;changed=true}});
+  if(r.available)S.stepsSource="phone";S.stepsAt=Date.now();
+  if(changed){save();if(!quiet&&!P&&!G&&!showing&&$("#layer").innerHTML===""){renderAll();evaluate()}}
 }
 
 /* ================= web: offline + automatic updates (same approach as Site Ready) ================= */

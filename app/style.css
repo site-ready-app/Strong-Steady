@@ -200,3 +200,6 @@ ul.plain{padding-left:1.2em}
 .jp.sel{outline:4px solid var(--gold);outline-offset:-4px}
 .jp i{position:absolute;right:4px;bottom:2px;font-style:normal;color:#fff;font-weight:700;text-shadow:0 1px 3px #000;font-size:.8em}
 @media (max-width:520px){.top{flex-wrap:wrap}.brand{flex:1 0 100%;white-space:nowrap}#chip-streak{margin-left:auto}}
+
+button.star{background:transparent;font:inherit;color:inherit;width:100%}
+button.star.on{background:var(--gold-soft)}
