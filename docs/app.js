@@ -1,7 +1,7 @@
 /* Strong & Steady — app logic. Runs as an Android app (Capacitor, with the native "Steady" plugin
    for steps, reminders, speech and sharing) and as a plain offline web app (manual activity logging). */
 "use strict";
-window.APP_VERSION="1.2";
+window.APP_VERSION="1.3";
 
 /* ================= utilities ================= */
 const $=s=>document.querySelector(s);
@@ -48,7 +48,12 @@ const native={
   awake(on){if(NP)NP.keepAwake({on:!!on}).catch(()=>{})},
   share(t){if(NP){NP.share({text:t}).catch(()=>{});return true}return false},
   battery(){if(NP)NP.openBatterySettings().catch(()=>{})},
-  testNudge(){if(NP)NP.testNudge().catch(()=>{})}
+  testNudge(){if(NP)NP.testNudge().catch(()=>{})},
+  async updStatus(){if(!NP)return null;try{return await NP.updateStatus()}catch(e){return null}},
+  async updCheck(force){if(!NP)return null;try{return await NP.checkUpdate({force:!!force})}catch(e){return null}},
+  async updInstall(){if(!NP)return false;try{return (await NP.installUpdate()).started}catch(e){return false}},
+  updQuiet(){if(NP)NP.installUpdate({quiet:true}).catch(()=>{})},
+  updSettings(){if(NP)NP.openInstallSettings().catch(()=>{})}
 };
 function syncNative(){
   if(!native.ok||!S.setup)return;
@@ -293,7 +298,7 @@ async function stepsPanel(){
 }
 function todayView(){
   const t=dk(),en=encouragement(),sug=suggestRoutine(),st=streak(),wk=weekStats(),ns=nextStop(),ill=isIll(t),rk=rank();
-  let h=`<h1>${esc(en.hi)}</h1><div class="card ${starCount(t)===3?"gold":"hero"}"><p style="margin-top:0"><b>${esc(en.msg)}</b></p>${starsHTML(t)}`;
+  let h=`<h1>${esc(en.hi)}</h1>${updCard()}<div class="card ${starCount(t)===3?"gold":"hero"}"><p style="margin-top:0"><b>${esc(en.msg)}</b></p>${starsHTML(t)}`;
   if(ill){h+=`<button class="btn" id="better">I'm feeling better</button><button class="btn ghost" id="gentle" style="margin-top:10px">Try a gentle few minutes (optional)</button>`;
     const days=S.illFrom?Math.round((fromKey(t)-fromKey(S.illFrom))/864e5)+1:1;
     if(days>=7)h+=`<div class="note">You've been unwell for ${days} days. If you're not getting better, it's a good idea to speak to your GP or call NHS 111.</div>`;}
@@ -320,6 +325,7 @@ function todayView(){
   const gn=$("#gentle");if(gn)gn.onclick=()=>startRoutine("gentle");
   const ck=$("#chk");if(ck)ck.onclick=()=>checkup();
   const gg=$("#gogames");if(gg)gg.onclick=()=>{TAB="games";renderAll()};
+  const ug=$("#updgo");if(ug)ug.onclick=updInstall;
   $("#view").querySelectorAll("[data-star]").forEach(b=>b.onclick=()=>{const k=b.dataset.star;
     if(k==="move")return stepsPanel();
     const rid=k==="strength"?(S.seated?"chair":"strength"):(S.seated?"flex":"balance");
@@ -422,6 +428,7 @@ function moreView(){
   ${S.family.map((m,i)=>`<div class="setrow"><b>${esc(m.from||"Family")}</b>: ${esc(m.text)} ${m.audio?"🎙️":""}<br><span class="small muted">${({any:"Any big moment",streak:"Streaks",journey:"Finishing a journey",pb:"A personal best"})[m.when]}</span> <button class="link" data-del="${i}">Remove</button></div>`).join("")}
   <button class="btn soft" id="s-fam" style="margin-top:10px">Add a message</button></div>
   <div class="card"><h2>Exercising safely</h2>${SAFETY}</div>
+  ${native.ok?`<div class="card"><h2>App updates</h2><p id="upd-st" class="small">The app checks for new versions by itself and installs them when it can.</p><div class="stack"><button class="btn soft" id="s-upd">Check for an update now</button></div></div>`:""}
   <div class="card"><h2>About</h2><p>Strong &amp; Steady, version ${APP_VERSION}. Free to use. Your information stays on this phone.</p>
   <p class="small">Exercises from the NHS <i>Strength and flexibility exercises</i> guides (sitting, strength, balance and flexibility). Weekly targets from the NHS <i>Physical activity guidelines for older adults</i>. Journey distances from National Trails. This app is not medical advice.</p>
   </div>
@@ -436,6 +443,9 @@ function moreView(){
   bind("#s-size","size");bind("#s-theme","theme");bind("#s-mode","mode");bind("#s-voice","voice",el=>el.checked);bind("#s-sound","sound",el=>el.checked);
   const ts=$("#s-test");if(ts)ts.onclick=()=>{native.testNudge();toast("A test reminder is on its way.")};
   const sb=$("#s-batt");if(sb)sb.onclick=batteryHelp;
+  const su=$("#s-upd");if(su){native.updStatus().then(st=>{if(st&&$("#upd-st"))$("#upd-st").textContent="You have version "+APP_VERSION+(st.lastCheck?". Last checked "+new Date(st.lastCheck).toLocaleString("en-GB",{weekday:"short",hour:"numeric",minute:"2-digit"})+".":".")});
+    su.onclick=async()=>{su.disabled=true;su.textContent="Checking…";const r=await updCheck(true);su.disabled=false;su.textContent="Check for an update now";
+      if(r&&r.ready)updInstall();else if(r&&r.latest>r.current)toast("A new version is downloading. It'll be ready shortly.");else if(r&&!r.error)toast("You have the latest version.");else toast("Couldn't check just now. Is the phone online?")}}
   $("#s-fam").onclick=addFamily;
   $("#view").querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>{S.family.splice(+b.dataset.del,1);save();renderAll()});
   $("#s-backup").onclick=()=>{const copy=Object.assign({},S,{family:S.family.map(m=>Object.assign({},m,{audio:null}))});
@@ -717,6 +727,41 @@ function setupView(step){
     save();setupView(step+1)};
 }
 
+/* ================= app updates (phone app installed from GitHub) ================= */
+let UPD=null;
+async function updCheck(force){
+  if(!native.ok||!S.setup)return null;
+  const r=await native.updCheck(force);if(!r)return null;const was=UPD&&UPD.ready;UPD=r;
+  if(r.ready&&!was&&!P&&!G&&!showing&&TAB==="today"&&$("#layer").innerHTML==="")renderAll();
+  return r;
+}
+function updCard(){
+  if(!UPD||!UPD.ready)return "";
+  return `<div class="card gold"><h3 style="margin-top:0">✨ A new version of the app is ready</h3><p>It has improvements and fixes. Installing takes a few seconds and keeps all your stars and progress.</p><button class="btn" id="updgo">Install the update</button></div>`;
+}
+async function updInstall(){
+  const st=await native.updStatus();
+  if(!st||!st.ready){toast("The update isn't ready yet. Try again in a little while.");return}
+  if(!st.canInstall){
+    openLayer(`<div class="dialog plain"><h2>One quick setting (just once)</h2><p>So the app can update itself, the phone needs your permission. You only do this once.</p>
+      <ol class="steps-list"><li>Tap <b>Open the setting</b> below.</li><li>Turn on <b>Allow from this source</b>.</li><li>Tap the phone's <b>back</b> button to come back here.</li></ol>
+      <div class="stack"><button class="btn" id="u-open">Open the setting</button><button class="btn soft" id="u-done">I've done it. Install now</button><button class="btn ghost" id="u-x">Not now</button></div></div>`);
+    $("#u-open").onclick=()=>native.updSettings();
+    $("#u-done").onclick=()=>{closeLayer();updInstall()};
+    $("#u-x").onclick=closeLayer;return}
+  openLayer(`<div class="dialog plain"><h2>Installing the update…</h2><p>If the phone asks <b>"Do you want to update this app?"</b>, tap <b>Update</b>.</p><p class="small muted">The app will close for a moment. Open it again afterwards and you'll find everything just as you left it.</p><button class="btn ghost" id="u-x">Close</button></div>`);
+  $("#u-x").onclick=closeLayer;
+  try{S.cel.preUpdate=APP_VERSION;save()}catch(e){}
+  const ok=await native.updInstall();if(!ok){closeLayer();toast("The update couldn't start. Please try again later.")}
+}
+function updatedNotice(){
+  if(!S.setup)return;const last=S.lastVersion;
+  if(last&&last!==APP_VERSION){S.lastVersion=APP_VERSION;save();
+    celebrate([{emoji:"✨",title:"The app has been updated",text:"You're now on version "+APP_VERSION+". "+(WHATS_NEW[APP_VERSION]||"Everything you've done so far is safe."),ok:"Lovely"}])}
+  else if(!last){S.lastVersion=APP_VERSION;save()}
+}
+const WHATS_NEW={"1.3":"The app now keeps itself up to date. New versions arrive by themselves, usually within the hour."};
+
 /* ================= steps refresh ================= */
 async function refreshSteps(quiet){
   if(!native.ok||!S.setup)return;
@@ -749,10 +794,11 @@ if(hosted){
 let lastDay=dk();
 function onWake(){
   if(dk()!==lastDay){lastDay=dk();if(!P)renderAll()}
-  rollIll();refreshSteps();if(hosted){checkForUpdate();applyUpdateIfSafe()}
+  rollIll();refreshSteps();updCheck(false);if(hosted){checkForUpdate();applyUpdateIfSafe()}
 }
-document.addEventListener("visibilitychange",()=>{if(!document.hidden)onWake()});
+document.addEventListener("visibilitychange",()=>{if(!document.hidden)onWake();
+  else if(UPD&&UPD.ready&&UPD.canInstall&&!P){try{S.cel.preUpdate=APP_VERSION;save()}catch(e){}native.updQuiet()}});
 setInterval(()=>{if(!document.hidden)refreshSteps()},5*60000);
 applyLook();rollIll();renderAll();
-if(S.setup){refreshSteps();setTimeout(evaluate,500);syncNative()}
+if(S.setup){refreshSteps();setTimeout(evaluate,500);setTimeout(updatedNotice,900);setTimeout(()=>updCheck(false),3000);syncNative()}
 window.__steady={state:()=>S,set:o=>{Object.assign(S,o);save();applyLook();renderAll()},evaluate,streak,journeyMiles,buildPlan};

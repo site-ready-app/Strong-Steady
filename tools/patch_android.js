@@ -41,6 +41,8 @@ if (!m.includes("ACTIVITY_RECOGNITION")) {
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <uses-permission android:name="android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION" />
     <uses-feature android:name="android.hardware.sensor.stepcounter" android:required="false" />
     <uses-feature android:name="android.hardware.microphone" android:required="false" />
     <queries>
@@ -53,6 +55,7 @@ if (!m.includes("ACTIVITY_RECOGNITION")) {
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
+        <receiver android:name=".UpdateReceiver" android:exported="false" />
     </application>`);
   write(man, m);
 }

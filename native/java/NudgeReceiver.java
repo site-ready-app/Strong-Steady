@@ -15,6 +15,11 @@ public class NudgeReceiver extends BroadcastReceiver {
             try {
                 if (Intent.ACTION_BOOT_COMPLETED.equals(action) || Intent.ACTION_MY_PACKAGE_REPLACED.equals(action)) {
                     StepStore.sample(app); // the step counter restarts at 0 after a reboot; StepStore handles that
+                    if (Intent.ACTION_MY_PACKAGE_REPLACED.equals(action)) {   // an update has just been installed: tidy up
+                        StepStore.prefs(app).edit().remove("updReady").remove("updNeedsTap").remove("updError").apply();
+                        java.io.File[] f = new java.io.File(app.getFilesDir(), "update").listFiles();
+                        if (f != null) for (java.io.File x : f) x.delete();
+                    }
                 } else {
                     Nudges.check(app, which);
                 }

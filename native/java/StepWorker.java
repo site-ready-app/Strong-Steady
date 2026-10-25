@@ -12,6 +12,7 @@ public class StepWorker extends Worker {
 
     @NonNull @Override public Result doWork() {
         try { Nudges.check(getApplicationContext(), 0); } catch (Exception ignored) {}
+        try { Updater.backgroundTick(getApplicationContext()); } catch (Exception ignored) {}
         return Result.success();
     }
 }

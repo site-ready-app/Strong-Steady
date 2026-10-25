@@ -96,4 +96,4 @@ jobs:
           FILES="strong-steady.apk"
           [ -f strong-steady.aab ] && FILES="$FILES strong-steady.aab"
           gh release create "$TAG" $FILES --title "Strong & Steady $V (build ${{ github.run_number }})" \
-            --notes "Download strong-steady.apk on the Android phone to install or update." --latest
+            --notes "$(git log -1 --pretty=%s)" --latest

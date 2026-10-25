@@ -123,6 +123,47 @@ public class SteadyPlugin extends Plugin {
         call.resolve();
     }
 
+    @PluginMethod public void updateStatus(PluginCall call) {
+        android.content.SharedPreferences p = StepStore.prefs(getContext());
+        JSObject r = new JSObject();
+        r.put("current", Updater.currentCode(getContext()));
+        r.put("currentName", Updater.currentName(getContext()));
+        r.put("latest", p.getLong("updLatest", 0));
+        r.put("latestName", p.getString("updLatestName", ""));
+        r.put("notes", p.getString("updNotes", ""));
+        r.put("ready", Updater.ready(getContext()));
+        r.put("canInstall", Updater.canInstall(getContext()));
+        r.put("lastCheck", p.getLong("updLastCheck", 0));
+        r.put("error", p.getString("updError", ""));
+        call.resolve(r);
+    }
+
+    @PluginMethod public void checkUpdate(PluginCall call) {
+        boolean force = Boolean.TRUE.equals(call.getBoolean("force", false));
+        new Thread(() -> { Updater.check(getContext(), force ? 0 : Updater.CHECK_OPEN); updateStatus(call); }).start();
+    }
+
+    @PluginMethod public void installUpdate(PluginCall call) {
+        boolean quiet = Boolean.TRUE.equals(call.getBoolean("quiet", false));
+        new Thread(() -> {
+            JSObject r = new JSObject();
+            if (quiet) {   // the person has just left the app: install in the background if Android allows it
+                try { Thread.sleep(1500); } catch (InterruptedException ignored) {}
+                Updater.quietInstallIfPossible(getContext()); r.put("started", true);
+            } else r.put("started", Updater.install(getContext(), true));
+            call.resolve(r);
+        }).start();
+    }
+
+    @PluginMethod public void openInstallSettings(PluginCall call) {
+        Intent i = new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + getContext().getPackageName()));
+        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        try { getContext().startActivity(i); } catch (Exception e) {
+            getContext().startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getContext().getPackageName())).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        }
+        call.resolve();
+    }
+
     @PluginMethod public void openBatterySettings(PluginCall call) {
         Intent i = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getContext().getPackageName()));
         i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
