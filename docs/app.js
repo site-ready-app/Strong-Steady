@@ -1,7 +1,7 @@
 /* Strong & Steady — app logic. Runs as an Android app (Capacitor, with the native "Steady" plugin
    for steps, reminders, speech and sharing) and as a plain offline web app (manual activity logging). */
 "use strict";
-window.APP_VERSION="1.4";
+window.APP_VERSION="1.4.1";
 
 /* ================= utilities ================= */
 const $=s=>document.querySelector(s);
@@ -757,7 +757,7 @@ async function pushState(force){
     const r=await fetch(NTFY+"/"+REG_TOPIC,{method:"POST",body});if(!r.ok)return false;
     S.push.last=sig;S.push.lastAt=Date.now();try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}return true}catch(e){return false}}
 async function testReminder(){
-  const u=pushTopic(),q="?title="+encodeURIComponent("Strong & Steady test")+"&tags=muscle&click="+encodeURIComponent(location.href.split("#")[0]);
+  const u=pushTopic(),q="?priority=4&title="+encodeURIComponent("Strong & Steady test")+"&tags=muscle&click="+encodeURIComponent(location.href.split("#")[0]);
   try{const r=await fetch(NTFY+"/"+u+q,{method:"POST",body:"Reminders are working. You'll get a gentle nudge at your exercise time if you haven't exercised yet."});return r.ok}catch(e){return false}}
 function reminderSetup(){
   const u=pushTopic(),ios=/iPhone|iPad|iPod/.test(navigator.userAgent);
@@ -772,13 +772,14 @@ function reminderSetup(){
   $("#rs-x").onclick=()=>{closeLayer();renderAll()};
   $("#rs-test").onclick=async()=>{$("#rs-st").textContent="Sending…";const ok=await testReminder();
     if(!ok){$("#rs-st").textContent="It couldn't be sent. Is the phone online?";return}
-    $("#rs-st").innerHTML="Sent! <b>Did a notification from ntfy arrive?</b>";
-    const yes=document.createElement("button");yes.className="btn gold";yes.textContent="Yes, it arrived";
-    const no=document.createElement("button");no.className="btn soft";no.textContent="No, nothing came";
+    $("#rs-st").innerHTML="Sent! <b>Did a notification from ntfy pop up?</b> (Close the ntfy app first, or it shows inside ntfy instead.)";
+    document.querySelectorAll(".rs-ans").forEach(b=>b.remove());
+    const yes=document.createElement("button");yes.className="btn gold rs-ans";yes.textContent="Yes, it arrived";
+    const no=document.createElement("button");no.className="btn soft rs-ans";no.textContent="No, or it only showed inside ntfy";
     $("#rs-st").after(yes,no);
     yes.onclick=async()=>{S.push.on=true;S.nudges=true;save();await pushState(true);closeLayer();renderAll();
       celebrate([{emoji:"🔔",title:"Reminders are set up!",text:"You'll get a gentle nudge around "+nice(S.mainTime)+" on days you haven't exercised yet. Change the time in Settings (⚙️) whenever you like.",ok:"Lovely"}])};
-    no.onclick=()=>{$("#rs-st").innerHTML="Check that: the code in ntfy matches exactly; ntfy is allowed to show notifications (iPhone Settings → Notifications → ntfy); and the phone isn't on Do Not Disturb. Then try the test again."}};
+    no.onclick=()=>{document.querySelectorAll(".rs-ans").forEach(b=>b.remove());$("#rs-st").innerHTML="<b>Please check:</b><br>• The code in ntfy matches exactly.<br>• iPhone <b>Settings → Notifications → ntfy</b>: Allow Notifications on; Lock Screen, Notification Centre and Banners all ticked; Banner Style <b>Persistent</b>.<br>• ntfy isn't in <b>Scheduled Summary</b>, and Focus / Do Not Disturb is off.<br>• Swipe the ntfy app closed, then send the test again."}};
 }
 
 /* ================= app updates (phone app installed from GitHub) ================= */

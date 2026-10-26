@@ -62,7 +62,7 @@ def mins(hhmm, default):
 
 def send(topic, title, message, tags="muscle"):
     # title etc. go in the address (UTF-8 safe), because HTTP headers can't carry emoji
-    q = urllib.parse.urlencode({"title": title, "tags": tags, "click": APP_URL})
+    q = urllib.parse.urlencode({"title": title, "tags": tags, "click": APP_URL, "priority": "4"})
     http("POST", f"{NTFY}/{topic}?{q}", data=message.encode("utf-8"))
 
 
