@@ -20,8 +20,9 @@ KEEP_DAYS = 60
 
 
 def private_key():
-    raw = os.environ.get("KS", "").strip()
+    raw = "".join(os.environ.get("KS", "").split())
     parts = raw.split(":")
+    print(f"::notice::Secret received: {len(raw)} characters in {len(parts)} part(s) (expected about 5,200 characters in 3 parts).")
     if len(parts) < 3 or not parts[2]:
         print("::warning::The reminder key isn't in the STEADY_KEYSTORE_B64 secret yet, so reminders can't be read.")
         return None
