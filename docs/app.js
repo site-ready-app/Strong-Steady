@@ -1,7 +1,7 @@
 /* Strong & Steady — app logic. Runs as an Android app (Capacitor, with the native "Steady" plugin
    for steps, reminders, speech and sharing) and as a plain offline web app (manual activity logging). */
 "use strict";
-window.APP_VERSION="1.5.2";
+window.APP_VERSION="1.5.3";
 
 /* ================= utilities ================= */
 const $=s=>document.querySelector(s);
@@ -300,7 +300,7 @@ function todayView(){
   const t=dk(),en=encouragement(),sug=suggestRoutine(),st=streak(),wk=weekStats(),ns=nextStop(),ill=isIll(t),rk=rank();
   const calNeedsUpdate=isIOS()&&webReminders()&&S.cal&&S.cal.on&&S.cal.time!==calSlot(S.mainTime);
   const remCard=calNeedsUpdate?`<div class="card gold"><b>📅 Your exercise time has changed</b><p class="small muted" style="margin:4px 0 10px">Update your daily Calendar reminder to ${nice(calSlot(S.mainTime))}.</p><button class="btn small" id="rem-go">Update the reminder</button></div>`:
-    webReminders()&&S.nudges&&!(S.push&&S.push.on)&&!(S.cal&&S.cal.on)&&!(S.push&&S.push.snooze>Date.now())?`<div class="card"><b>🔔 Would you like reminders on this phone?</b><p class="small muted" style="margin:4px 0 10px">A gentle nudge at your exercise time, only on days you haven't exercised yet.</p><div class="row"><button class="btn small" id="rem-go">Set up (2 minutes)</button><button class="btn ghost small" id="rem-no">Not now</button></div></div>`:"";
+    webReminders()&&S.nudges&&!(S.push&&S.push.on)&&!(S.cal&&S.cal.on)&&!(S.push&&S.push.snooze>Date.now())?`<div class="card"><b>🔔 Would you like reminders on this phone?</b><p class="small muted" style="margin:4px 0 10px">${isIOS()?"A daily nudge at your exercise time, from your iPhone's Calendar.":"A gentle nudge at your exercise time, only on days you haven't exercised yet."}</p><div class="row"><button class="btn small" id="rem-go">${isIOS()?"Set up (1 minute)":"Set up (2 minutes)"}</button><button class="btn ghost small" id="rem-no">Not now</button></div></div>`:"";
   let h=`<h1>${esc(en.hi)}</h1>${updCard()}<div class="card ${starCount(t)===3?"gold":"hero"}"><p style="margin-top:0"><b>${esc(en.msg)}</b></p>${starsHTML(t)}`;
   if(ill){h+=`<button class="btn" id="better">I'm feeling better</button><button class="btn ghost" id="gentle" style="margin-top:10px">Try a gentle few minutes (optional)</button>`;
     const days=S.illFrom?Math.round((fromKey(t)-fromKey(S.illFrom))/864e5)+1:1;
@@ -731,7 +731,9 @@ function setupView(step){
     if(step===4){const own=$("#su-treat").value.trim();if(own)S.treat=own;const bg=$("#su-big").value;S.bigTreat=bg==="__own"?($("#su-bigown").value.trim()||"a big treat"):bg}
     if(step===5){S.stepGoal=+$("#su-goal").value;S.setup=true;S.created=S.created||dk();S.journey.start=S.journey.start||dk();save();
       show(false);TAB="today";renderAll();say("All set"+(S.name?", "+S.name:"")+". Let's get started!");
-      if(native.ok)setTimeout(batteryHelp,600);return}
+      if(native.ok)setTimeout(batteryHelp,600);
+      else if(isIOS()&&webReminders()&&S.nudges)setTimeout(()=>calSetup(true),900);
+      return}
     save();setupView(step+1)};
 }
 
@@ -745,22 +747,36 @@ function calLink(){return "cal/exercise-"+calSlot(S.mainTime).replace(":","")+".
    in a pop-up browser sheet with a "Done" button and can never take over the app's own window. */
 const CAL_EXT="https://cdn.jsdelivr.net/gh/site-ready-app/Strong-Steady@main/docs/";
 function calUrls(){return {ext:CAL_EXT+calLink()}}
-function calSetup(){
+/* A picture of the iPhone screen they'll see, with "Add All" pointed out. */
+function calPicture(t){return `<div aria-hidden="true" style="border:2px solid var(--line);border-radius:16px;overflow:hidden;margin:10px 0;background:var(--card);font-family:-apple-system,system-ui,sans-serif">
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid var(--line);font-size:.85em">
+    <span style="color:#0a84ff">Done</span><b>1 Event</b><span style="color:#0a84ff;font-weight:700;border:3px solid var(--gold);border-radius:10px;padding:2px 8px;background:var(--gold-soft)">Add All</span></div>
+  <div style="padding:12px;font-size:.85em"><b>Exercise time ⭐ Strong &amp; Steady</b><br><span class="muted">Every day at ${nice(t)}</span></div>
+  <div style="text-align:right;padding:0 12px 8px;font-size:.85em;color:var(--gold-ink);font-weight:700">↑ tap <u>Add All</u></div></div>`}
+function calSetup(fromSetup){
   S.cal=S.cal||{};const t=calSlot(S.mainTime),changing=S.cal.on&&S.cal.time&&S.cal.time!==t,u=calUrls();
-  openLayer(`<div class="dialog plain"><h2>🔔 A daily reminder</h2>
+  let opened=false;
+  const ask=()=>{openLayer(`<div class="dialog plain"><h2>Welcome back!</h2><p>Did you tap <b>Add All</b>?</p>${calPicture(t)}
+      <div class="stack"><button class="btn gold" id="cal-yes">Yes, it's added</button><button class="btn soft" id="cal-again">No, show me again</button><button class="btn ghost" id="cal-x2">Do it later</button></div></div>`);
+    $("#cal-yes").onclick=()=>{S.cal={on:true,time:t};S.push=S.push||{};S.push.snooze=0;save();closeLayer();renderAll();
+      celebrate([{emoji:"📅",title:"Daily reminder added!",text:"Your iPhone will remind you at "+nice(t)+" every day. Tap the reminder to open Steady.",ok:"Lovely"}])};
+    $("#cal-again").onclick=()=>calSetup(fromSetup);$("#cal-x2").onclick=closeLayer};
+  const back=()=>{if(!document.hidden&&opened){opened=false;document.removeEventListener("visibilitychange",back);setTimeout(ask,400)}};
+  openLayer(`<div class="dialog plain"><h2>🔔 ${fromSetup?"One last thing: a daily reminder":"A daily reminder"}</h2>
     ${changing?`<div class="note"><b>First, remove the old one (${nice(S.cal.time)}):</b> open the <b>Calendar</b> app, tap the <b>Exercise time</b> event, tap <b>Delete Event</b>, then <b>Delete All Future Events</b>. Then come back here.</div>`:""}
-    <p>Your iPhone's own Calendar will remind you every day at <b>${nice(t)}</b>.</p>
-    <ol class="steps-list"><li>Tap <b>Open the calendar invitation</b>.</li><li>A calendar page slides up. Tap <b>Add All</b> (or <b>Add to Calendar</b>).</li><li>Tap <b>Done</b> (top corner) to come back to Steady.</li></ol>
-    <div class="stack"><a class="btn" id="cal-add" href="${u.ext}" target="_blank" rel="noopener">📅 Open the calendar invitation</a>
-    <button class="btn soft" id="cal-done">I've added it</button>
+    <p>Your iPhone can remind you every day at <b>${nice(t)}</b>, using its own Calendar.</p>
+    <ol class="steps-list"><li>Tap the green button below.</li><li>On the screen that slides up, tap <b>Add All</b> at the top right:</li></ol>
+    ${calPicture(t)}
+    <ol class="steps-list" start="3"><li>Tap <b>Done</b> at the top left to come back here.</li></ol>
+    <div class="stack"><a class="btn" id="cal-add" href="${u.ext}" target="_blank" rel="noopener">📅 Add my daily reminder</a>
     <details style="margin-top:4px"><summary class="link" style="display:inline">That didn't work?</summary>
       <p class="small">Tap <b>Copy the link</b>, open <b>Safari</b>, tap the address bar, paste it in and go. Then tap <b>Add All</b>.</p>
       <button class="btn ghost small" id="cal-copy">Copy the link</button><p class="small muted" style="word-break:break-all">${u.ext}</p></details>
-    <button class="btn ghost" id="cal-x">Not now</button></div>
-    <p class="small muted">It reminds you every day at that time, even if you've already exercised. If you change your exercise time, Steady will help you update it.</p></div>`);
+    <button class="btn ghost" id="cal-x">${fromSetup?"Skip for now":"Not now"}</button></div>
+    <p class="small muted">It reminds you every day at that time, even if you've already exercised. You can add or change it later in Settings (⚙️).</p></div>`);
+  $("#cal-add").addEventListener("click",()=>{opened=true;document.addEventListener("visibilitychange",back);/* the pop-up sheet doesn't always count as leaving the app, so ask anyway after a short while */
+    setTimeout(()=>{if(opened){opened=false;document.removeEventListener("visibilitychange",back);ask()}},12000)});
   $("#cal-copy").onclick=()=>{navigator.clipboard&&navigator.clipboard.writeText(u.ext).then(()=>toast("Link copied. Now open Safari and paste it."),()=>toast("Press and hold the link to copy it."))};
-  $("#cal-done").onclick=()=>{S.cal={on:true,time:t};S.push=S.push||{};S.push.snooze=0;save();closeLayer();renderAll();
-    celebrate([{emoji:"📅",title:"Daily reminder added!",text:"Your iPhone will remind you at "+nice(t)+" every day. Tap the reminder to open Steady.",ok:"Lovely"}])};
   $("#cal-x").onclick=()=>{closeLayer()};
 }
 
@@ -846,7 +862,7 @@ function updatedNotice(){
     celebrate([{emoji:"✨",title:"The app has been updated",text:"You're now on version "+APP_VERSION+". "+(WHATS_NEW[APP_VERSION]||"Everything you've done so far is safe."),ok:"Lovely"}])}
   else if(!last){S.lastVersion=APP_VERSION;save()}
 }
-const WHATS_NEW={"1.5.2":"The daily Calendar reminder now opens safely, and the app can restart itself if anything goes wrong.","1.5":"On iPhone, you can now add a daily reminder to your Calendar with one tap.","1.4":"Behind the scenes: the app now also works on iPhones, with reminders through the free ntfy app.","1.3":"The app now keeps itself up to date. New versions arrive by themselves, usually within the hour."};
+const WHATS_NEW={"1.5.3":"Setting up the daily Calendar reminder on iPhone is now simpler, with a picture showing exactly what to tap.","1.5.2":"The daily Calendar reminder now opens safely, and the app can restart itself if anything goes wrong.","1.5":"On iPhone, you can now add a daily reminder to your Calendar with one tap.","1.4":"Behind the scenes: the app now also works on iPhones, with reminders through the free ntfy app.","1.3":"The app now keeps itself up to date. New versions arrive by themselves, usually within the hour."};
 
 /* ================= steps refresh ================= */
 async function refreshSteps(quiet){
