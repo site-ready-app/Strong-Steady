@@ -1,7 +1,7 @@
 /* Strong & Steady — app logic. Runs as an Android app (Capacitor, with the native "Steady" plugin
    for steps, reminders, speech and sharing) and as a plain offline web app (manual activity logging). */
 "use strict";
-window.APP_VERSION="1.5.3";
+window.APP_VERSION="1.5.4";
 
 /* ================= utilities ================= */
 const $=s=>document.querySelector(s);
@@ -100,6 +100,9 @@ function journeyMiles(){
   m+=S.sessions.filter(x=>x.d>=st&&x.r!=="gentle").length*SESSION_MILES;
   return Math.min(m,J().miles);
 }
+function todayMiles(){const t=dk(),st=S.journey.start;if(!st||t<st)return 0;
+  const w=S.walks.filter(x=>x.d===t&&x.kind==="Walk").reduce((a,x)=>a+x.min,0);
+  return Math.max((S.steps[t]||0)/STEPS_PER_MILE,w/WALK_MIN_PER_MILE)+S.sessions.filter(x=>x.d===t&&x.r!=="gentle").length*SESSION_MILES}
 function nextStop(){const m=journeyMiles(),j=J();const s=j.stops.find(x=>x.mi>m+1e-9);return s?{stop:s,left:s.mi-m}:null}
 function level(rid){return S.levels[rid]||1}
 function scaleReps(b,L){return L===1?b:L===2?Math.round(b*1.5):b*2}
@@ -315,7 +318,7 @@ function todayView(){
   h+=`<div class="tiles"><div class="tile"><b>🔥 ${st}</b><span>day${st===1?"":"s"} in a row</span></div>
     <div class="tile"><b>${wk.stars}</b><span>stars this week</span></div>
     <div class="tile"><b>${wk.sbDays} of 2</b><span>NHS strength &amp; balance days ${wk.sbDays>=2?"✓ done":""}</span></div>
-    <div class="tile"><b>${ns?ns.left.toFixed(1)+" mi":"🏁"}</b><span>${ns?"to "+esc(ns.stop.name):"Journey complete!"}</span></div></div>`;
+    <div class="tile"><b>${ns?ns.left.toFixed(1)+" mi to go":"🏁"}</b><span>${ns?"until "+esc(ns.stop.name)+(todayMiles()>0?" · today +"+todayMiles().toFixed(1)+" mi":""):"Journey complete!"}</span></div></div>`;
   const pc=rk.next?Math.round((rk.p-rk.base)/(rk.next[0]-rk.base)*100):100;
   h+=`<div class="card"><div class="row" style="align-items:center"><div><b>⭐ ${esc(rk.name)}</b> <span class="muted small">${fmt(rk.p)} points</span></div></div>
     <div class="bar goldbar" style="margin:8px 0"><i style="width:${pc}%"></i></div><span class="muted small">${rk.next?fmt(rk.next[0]-rk.p)+" points to "+esc(rk.next[1])+". Every star is 10 points.":"The very top. Amazing!"}</span></div>`;
@@ -365,7 +368,7 @@ function journeyView(){
   ${pts.map((f,i)=>`<circle cx="${px(f)}" cy="${py(f)}" r="${i===0||i===pts.length-1?9:6}" fill="${f<=pc?"var(--gold)":"var(--card)"}" stroke="var(--pri)" stroke-width="3"/>`).join("")}
   <text x="${px(pc)}" y="${py(pc)-16}" text-anchor="middle" font-size="26">🚶</text></svg>
   <div class="bar goldbar"><i style="width:${(pc*100).toFixed(1)}%"></i></div>
-  <p><b>${mi.toFixed(1)} of ${j.miles} miles</b>${ns?` · ${ns.left.toFixed(1)} miles to ${esc(ns.stop.name)}`:""}</p>
+  <p><b>${mi.toFixed(1)} of ${j.miles} miles walked</b>${todayMiles()>0?` · today +${todayMiles().toFixed(1)}`:""}${ns?`<br>${ns.left.toFixed(1)} miles to go until ${esc(ns.stop.name)}`:""}</p>
   <p class="small muted">How you move along: every ${fmt(STEPS_PER_MILE)} steps is about a mile${S.stepsSource?"":" (or 25 minutes of walking that you log)"}, plus half a mile for every exercise session.</p></div>`;
   if(mi>=j.miles)h+=`<button class="btn gold" id="again" style="margin-bottom:14px">Walk it again</button>`;
   h+=`<div class="card"><h2>Postcards</h2>`;
@@ -521,7 +524,8 @@ function logWalk(){
     <div class="stack" style="margin-top:14px"><button class="btn" id="ws">Save</button><button class="btn ghost" id="wx">Cancel</button></div><p class="small muted">15 minutes or more of activity earns your Move star.</p></div>`);
     document.querySelectorAll("[data-k]").forEach(b=>b.onclick=()=>{kind=b.dataset.k;draw()});
     document.querySelectorAll("[data-m]").forEach(b=>b.onclick=()=>{min=+b.dataset.m;draw()});
-    $("#ws").onclick=()=>{S.walks.push({d:dk(),t:Date.now(),kind,min});save();closeLayer();renderAll();evaluate()};$("#wx").onclick=closeLayer};
+    $("#ws").onclick=()=>{const before=journeyMiles();S.walks.push({d:dk(),t:Date.now(),kind,min});save();closeLayer();renderAll();
+      const gain=journeyMiles()-before;toast(gain>0.05?"+"+gain.toFixed(1)+" miles on your journey 🚶":"Saved: "+min+" minutes of "+kind.toLowerCase()+". Well done!",3500);evaluate()};$("#wx").onclick=closeLayer};
   draw();
 }
 
