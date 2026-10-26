@@ -56,7 +56,7 @@ cal = out / "cal"; cal.mkdir(exist_ok=True)
 for m in range(5 * 60, 22 * 60 + 1, 15):
     hh, mm = divmod(m, 60)
     ics = "\r\n".join([
-        "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Strong and Steady//Exercise reminder//EN", "CALSCALE:GREGORIAN", "METHOD:PUBLISH",
+        "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Strong and Steady//Exercise reminder//EN", "CALSCALE:GREGORIAN", "METHOD:PUBLISH", "X-WR-CALNAME:Strong & Steady", "REFRESH-INTERVAL;VALUE=DURATION:P1D", "X-PUBLISHED-TTL:P1D",
         "BEGIN:VEVENT", "UID:strong-steady-daily-exercise@site-ready-app.github.io", "DTSTAMP:20261026T000000Z",
         f"DTSTART:20260101T{hh:02d}{mm:02d}00", f"DTEND:20260101T{hh:02d}{(mm + 15) % 60:02d}00" if mm + 15 < 60 else f"DTSTART_END_PLACEHOLDER",
         "RRULE:FREQ=DAILY", "SUMMARY:Exercise time ⭐ Strong & Steady",

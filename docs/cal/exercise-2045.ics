@@ -3,6 +3,9 @@ VERSION:2.0
 PRODID:-//Strong and Steady//Exercise reminder//EN
 CALSCALE:GREGORIAN
 METHOD:PUBLISH
+X-WR-CALNAME:Strong & Steady
+REFRESH-INTERVAL;VALUE=DURATION:P1D
+X-PUBLISHED-TTL:P1D
 BEGIN:VEVENT
 UID:strong-steady-daily-exercise@site-ready-app.github.io
 DTSTAMP:20261026T000000Z

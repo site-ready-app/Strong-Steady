@@ -1,7 +1,7 @@
 /* Strong & Steady — app logic. Runs as an Android app (Capacitor, with the native "Steady" plugin
    for steps, reminders, speech and sharing) and as a plain offline web app (manual activity logging). */
 "use strict";
-window.APP_VERSION="1.5";
+window.APP_VERSION="1.5.1";
 
 /* ================= utilities ================= */
 const $=s=>document.querySelector(s);
@@ -741,15 +741,22 @@ function setupView(step){
 const isIOS=()=>/iPhone|iPad|iPod/.test(navigator.userAgent)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
 function calSlot(t){const m=Math.round(mins(t)/15)*15,c=Math.min(22*60,Math.max(5*60,m));return hhmm(c)}
 function calLink(){return "cal/exercise-"+calSlot(S.mainTime).replace(":","")+".ics"}
+function calUrls(){const path=location.pathname.replace(/[^/]*$/,"")+calLink();return {webcal:"webcal://"+location.host+path,https:"https://"+location.host+path}}
 function calSetup(){
-  S.cal=S.cal||{};const t=calSlot(S.mainTime),changing=S.cal.on&&S.cal.time&&S.cal.time!==t;
+  S.cal=S.cal||{};const t=calSlot(S.mainTime),changing=S.cal.on&&S.cal.time&&S.cal.time!==t,u=calUrls();
   openLayer(`<div class="dialog plain"><h2>🔔 A daily reminder</h2>
-    ${changing?`<div class="note"><b>First, remove the old one (${nice(S.cal.time)}):</b> open the <b>Calendar</b> app, tap the <b>Exercise time</b> event, tap <b>Delete Event</b>, then <b>Delete All Future Events</b>. Then come back here.</div>`:""}
+    ${changing?`<div class="note"><b>First, remove the old one (${nice(S.cal.time)}):</b> open the <b>Calendar</b> app, tap <b>Calendars</b> at the bottom, tap the <b>ⓘ</b> next to <b>Strong &amp; Steady</b>, then <b>Unsubscribe</b> (or <b>Delete Calendar</b>). Then come back here.</div>`:""}
     <p>Your iPhone's own Calendar will remind you every day at <b>${nice(t)}</b>.</p>
-    <ol class="steps-list"><li>Tap <b>Add to my Calendar</b> below.</li><li>Tap <b>Add All</b> (or <b>Add to Calendar</b>) on the screen that opens.</li><li>Come back to Steady.</li></ol>
-    <div class="stack"><a class="btn" id="cal-add" href="${calLink()}" target="_blank" rel="noopener">📅 Add to my Calendar</a>
-    <button class="btn soft" id="cal-done">I've added it</button><button class="btn ghost" id="cal-x">Not now</button></div>
+    <ol class="steps-list"><li>Tap <b>Add to my Calendar</b> below.</li><li>When the iPhone asks, tap <b>Subscribe</b>.</li>
+    <li><b>Important:</b> on the next screen, turn <b>off</b> <b>Remove Alerts</b>, so the reminder can pop up.</li><li>Tap <b>Add</b> (or <b>Done</b>), then come back to Steady.</li></ol>
+    <div class="stack"><a class="btn" id="cal-add" href="${u.webcal}">📅 Add to my Calendar</a>
+    <button class="btn soft" id="cal-done">I've added it</button>
+    <details style="margin-top:4px"><summary class="link" style="display:inline">That didn't work?</summary>
+      <p class="small">Try it in Safari instead: tap <b>Copy the link</b>, open <b>Safari</b>, tap the address bar, paste it in and go. Then tap <b>Add All</b>.</p>
+      <button class="btn ghost small" id="cal-copy">Copy the link</button><p class="small muted" style="word-break:break-all">${u.https}</p></details>
+    <button class="btn ghost" id="cal-x">Not now</button></div>
     <p class="small muted">It reminds you every day at that time, even if you've already exercised. If you change your exercise time, Steady will help you update it.</p></div>`);
+  $("#cal-copy").onclick=()=>{navigator.clipboard&&navigator.clipboard.writeText(u.https).then(()=>toast("Link copied. Now open Safari and paste it."),()=>toast("Press and hold the link below to copy it."))};
   $("#cal-done").onclick=()=>{S.cal={on:true,time:t};S.push=S.push||{};S.push.snooze=0;save();closeLayer();renderAll();
     celebrate([{emoji:"📅",title:"Daily reminder added!",text:"Your iPhone will remind you at "+nice(t)+" every day. Tap the reminder to open Steady.",ok:"Lovely"}])};
   $("#cal-x").onclick=()=>{closeLayer()};
