@@ -1,6 +1,6 @@
 {
   "name": "strong-steady",
-  "version": "1.5.4",
+  "version": "1.5.5",
   "private": true,
   "description": "Strong & Steady: gentle guided exercise for older adults, with stars, streaks, treats and a walking journey.",
   "dependencies": {

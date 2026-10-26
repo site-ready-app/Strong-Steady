@@ -1,7 +1,7 @@
 /* Strong & Steady — app logic. Runs as an Android app (Capacitor, with the native "Steady" plugin
    for steps, reminders, speech and sharing) and as a plain offline web app (manual activity logging). */
 "use strict";
-window.APP_VERSION="1.5.4";
+window.APP_VERSION="1.5.5";
 
 /* ================= utilities ================= */
 const $=s=>document.querySelector(s);
@@ -318,7 +318,7 @@ function todayView(){
   h+=`<div class="tiles"><div class="tile"><b>🔥 ${st}</b><span>day${st===1?"":"s"} in a row</span></div>
     <div class="tile"><b>${wk.stars}</b><span>stars this week</span></div>
     <div class="tile"><b>${wk.sbDays} of 2</b><span>NHS strength &amp; balance days ${wk.sbDays>=2?"✓ done":""}</span></div>
-    <div class="tile"><b>${ns?ns.left.toFixed(1)+" mi to go":"🏁"}</b><span>${ns?"until "+esc(ns.stop.name)+(todayMiles()>0?" · today +"+todayMiles().toFixed(1)+" mi":""):"Journey complete!"}</span></div></div>`;
+    <div class="tile"><b style="white-space:nowrap">${todayMiles().toFixed(1)} mi</b><span>🚶 walked today${ns?`<br><span class="small">${ns.left.toFixed(1)} mi to go until ${esc(ns.stop.name)}</span>`:"<br><span class=\"small\">Journey complete! 🏁</span>"}</span></div></div>`;
   const pc=rk.next?Math.round((rk.p-rk.base)/(rk.next[0]-rk.base)*100):100;
   h+=`<div class="card"><div class="row" style="align-items:center"><div><b>⭐ ${esc(rk.name)}</b> <span class="muted small">${fmt(rk.p)} points</span></div></div>
     <div class="bar goldbar" style="margin:8px 0"><i style="width:${pc}%"></i></div><span class="muted small">${rk.next?fmt(rk.next[0]-rk.p)+" points to "+esc(rk.next[1])+". Every star is 10 points.":"The very top. Amazing!"}</span></div>`;
