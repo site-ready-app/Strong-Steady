@@ -61,8 +61,9 @@ def mins(hhmm, default):
 
 
 def send(topic, title, message, tags="muscle"):
-    http("POST", f"{NTFY}/{topic}", data=message.encode("utf-8"),
-         headers={"Title": title, "Tags": tags, "Click": APP_URL, "Priority": "default"})
+    # title etc. go in the address (UTF-8 safe), because HTTP headers can't carry emoji
+    q = urllib.parse.urlencode({"title": title, "tags": tags, "click": APP_URL})
+    http("POST", f"{NTFY}/{topic}?{q}", data=message.encode("utf-8"))
 
 
 def decide(cfg, now_local, sent_today):
