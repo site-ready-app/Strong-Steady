@@ -1,7 +1,7 @@
 /* Strong & Steady — app logic. Runs as an Android app (Capacitor, with the native "Steady" plugin
    for steps, reminders, speech and sharing) and as a plain offline web app (manual activity logging). */
 "use strict";
-window.APP_VERSION="1.5.1";
+window.APP_VERSION="1.5.2";
 
 /* ================= utilities ================= */
 const $=s=>document.querySelector(s);
@@ -741,22 +741,24 @@ function setupView(step){
 const isIOS=()=>/iPhone|iPad|iPod/.test(navigator.userAgent)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
 function calSlot(t){const m=Math.round(mins(t)/15)*15,c=Math.min(22*60,Math.max(5*60,m));return hhmm(c)}
 function calLink(){return "cal/exercise-"+calSlot(S.mainTime).replace(":","")+".ics"}
-function calUrls(){const path=location.pathname.replace(/[^/]*$/,"")+calLink();return {webcal:"webcal://"+location.host+path,https:"https://"+location.host+path}}
+/* Calendar files are opened from a separate address (jsDelivr) so that, inside an iPhone Home Screen app, they open
+   in a pop-up browser sheet with a "Done" button and can never take over the app's own window. */
+const CAL_EXT="https://cdn.jsdelivr.net/gh/site-ready-app/Strong-Steady@main/docs/";
+function calUrls(){return {ext:CAL_EXT+calLink()}}
 function calSetup(){
   S.cal=S.cal||{};const t=calSlot(S.mainTime),changing=S.cal.on&&S.cal.time&&S.cal.time!==t,u=calUrls();
   openLayer(`<div class="dialog plain"><h2>🔔 A daily reminder</h2>
-    ${changing?`<div class="note"><b>First, remove the old one (${nice(S.cal.time)}):</b> open the <b>Calendar</b> app, tap <b>Calendars</b> at the bottom, tap the <b>ⓘ</b> next to <b>Strong &amp; Steady</b>, then <b>Unsubscribe</b> (or <b>Delete Calendar</b>). Then come back here.</div>`:""}
+    ${changing?`<div class="note"><b>First, remove the old one (${nice(S.cal.time)}):</b> open the <b>Calendar</b> app, tap the <b>Exercise time</b> event, tap <b>Delete Event</b>, then <b>Delete All Future Events</b>. Then come back here.</div>`:""}
     <p>Your iPhone's own Calendar will remind you every day at <b>${nice(t)}</b>.</p>
-    <ol class="steps-list"><li>Tap <b>Add to my Calendar</b> below.</li><li>When the iPhone asks, tap <b>Subscribe</b>.</li>
-    <li><b>Important:</b> on the next screen, turn <b>off</b> <b>Remove Alerts</b>, so the reminder can pop up.</li><li>Tap <b>Add</b> (or <b>Done</b>), then come back to Steady.</li></ol>
-    <div class="stack"><a class="btn" id="cal-add" href="${u.webcal}">📅 Add to my Calendar</a>
+    <ol class="steps-list"><li>Tap <b>Open the calendar invitation</b>.</li><li>A calendar page slides up. Tap <b>Add All</b> (or <b>Add to Calendar</b>).</li><li>Tap <b>Done</b> (top corner) to come back to Steady.</li></ol>
+    <div class="stack"><a class="btn" id="cal-add" href="${u.ext}" target="_blank" rel="noopener">📅 Open the calendar invitation</a>
     <button class="btn soft" id="cal-done">I've added it</button>
     <details style="margin-top:4px"><summary class="link" style="display:inline">That didn't work?</summary>
-      <p class="small">Try it in Safari instead: tap <b>Copy the link</b>, open <b>Safari</b>, tap the address bar, paste it in and go. Then tap <b>Add All</b>.</p>
-      <button class="btn ghost small" id="cal-copy">Copy the link</button><p class="small muted" style="word-break:break-all">${u.https}</p></details>
+      <p class="small">Tap <b>Copy the link</b>, open <b>Safari</b>, tap the address bar, paste it in and go. Then tap <b>Add All</b>.</p>
+      <button class="btn ghost small" id="cal-copy">Copy the link</button><p class="small muted" style="word-break:break-all">${u.ext}</p></details>
     <button class="btn ghost" id="cal-x">Not now</button></div>
     <p class="small muted">It reminds you every day at that time, even if you've already exercised. If you change your exercise time, Steady will help you update it.</p></div>`);
-  $("#cal-copy").onclick=()=>{navigator.clipboard&&navigator.clipboard.writeText(u.https).then(()=>toast("Link copied. Now open Safari and paste it."),()=>toast("Press and hold the link below to copy it."))};
+  $("#cal-copy").onclick=()=>{navigator.clipboard&&navigator.clipboard.writeText(u.ext).then(()=>toast("Link copied. Now open Safari and paste it."),()=>toast("Press and hold the link to copy it."))};
   $("#cal-done").onclick=()=>{S.cal={on:true,time:t};S.push=S.push||{};S.push.snooze=0;save();closeLayer();renderAll();
     celebrate([{emoji:"📅",title:"Daily reminder added!",text:"Your iPhone will remind you at "+nice(t)+" every day. Tap the reminder to open Steady.",ok:"Lovely"}])};
   $("#cal-x").onclick=()=>{closeLayer()};
@@ -844,7 +846,7 @@ function updatedNotice(){
     celebrate([{emoji:"✨",title:"The app has been updated",text:"You're now on version "+APP_VERSION+". "+(WHATS_NEW[APP_VERSION]||"Everything you've done so far is safe."),ok:"Lovely"}])}
   else if(!last){S.lastVersion=APP_VERSION;save()}
 }
-const WHATS_NEW={"1.5":"On iPhone, you can now add a daily reminder to your Calendar with one tap.","1.4":"Behind the scenes: the app now also works on iPhones, with reminders through the free ntfy app.","1.3":"The app now keeps itself up to date. New versions arrive by themselves, usually within the hour."};
+const WHATS_NEW={"1.5.2":"The daily Calendar reminder now opens safely, and the app can restart itself if anything goes wrong.","1.5":"On iPhone, you can now add a daily reminder to your Calendar with one tap.","1.4":"Behind the scenes: the app now also works on iPhones, with reminders through the free ntfy app.","1.3":"The app now keeps itself up to date. New versions arrive by themselves, usually within the hour."};
 
 /* ================= steps refresh ================= */
 async function refreshSteps(quiet){
@@ -874,6 +876,30 @@ if(hosted){
   try{if(sessionStorage.getItem("steady.updated")){sessionStorage.removeItem("steady.updated");setTimeout(()=>toast("Updated to version "+APP_VERSION),300)}}catch(e){}
 }
 
+/* ================= fail-safe ================= */
+/* 1. Links: anything that isn't part of the app opens in a separate browser sheet (with "Done"), never in the app's
+      own window, and odd link types (webcal:, data:, etc.) are blocked. */
+document.addEventListener("click",e=>{const a=e.target.closest&&e.target.closest("a[href]");if(!a)return;
+  const href=a.getAttribute("href")||"";if(href.startsWith("#"))return;
+  let url;try{url=new URL(href,location.href)}catch(x){e.preventDefault();return}
+  if(!/^https?:$/.test(url.protocol)){e.preventDefault();toast("That link can't be opened from here.");return}
+  const inApp=url.origin===location.origin&&url.pathname.startsWith(location.pathname.replace(/[^/]*$/,""));
+  if(inApp&&!/\/(index\.html)?$/.test(url.pathname)){e.preventDefault();toast("That link can't be opened from here.");return}
+  if(!inApp)a.setAttribute("target","_blank")},true);
+/* 2. Errors: if something goes wrong, offer a one-tap restart instead of leaving a broken screen. Progress is kept. */
+let errShown=false;
+function safeRestart(hard){
+  const go=()=>location.replace(location.pathname.replace(/[^/]*$/,"")+"?restart="+Date.now());
+  if(!hard)return go();
+  Promise.all([navigator.serviceWorker?navigator.serviceWorker.getRegistrations().then(r=>Promise.all(r.map(x=>x.unregister()))):0,
+    window.caches?caches.keys().then(k=>Promise.all(k.map(x=>caches.delete(x)))):0]).catch(()=>{}).finally(go);
+}
+window.__steadyRestart=safeRestart;
+window.addEventListener("error",()=>{if(errShown)return;errShown=true;
+  const d=document.createElement("div");d.className="toast";d.style.bottom="auto";d.style.top="16px";
+  d.innerHTML='Something went wrong. <button class="btn small gold" style="margin-top:8px">Restart the app</button>';
+  d.querySelector("button").onclick=()=>safeRestart(false);document.body.appendChild(d)});
+
 /* ================= start ================= */
 let lastDay=dk();
 function onWake(){
@@ -885,4 +911,5 @@ document.addEventListener("visibilitychange",()=>{if(!document.hidden)onWake();
 setInterval(()=>{if(!document.hidden)refreshSteps()},5*60000);
 applyLook();rollIll();renderAll();
 if(S.setup){refreshSteps();setTimeout(()=>pushState(false),2000);setTimeout(evaluate,500);setTimeout(updatedNotice,900);setTimeout(()=>updCheck(false),3000);syncNative()}
+window.__steadyOK=true;
 window.__steady={state:()=>S,set:o=>{Object.assign(S,o);save();applyLook();renderAll()},evaluate,streak,journeyMiles,buildPlan};

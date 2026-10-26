@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Steady">
-<script>window.SITE_BUILD="aaa5b56730f2";</script>
+<script>window.SITE_BUILD="2043b28cb7bb";</script>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -36,6 +36,13 @@
 </div>
 <div id="layer"></div>
 <canvas id="confetti" hidden></canvas>
+<div id="rescue" hidden style="max-width:520px;margin:40px auto;padding:20px;font-family:system-ui,sans-serif;font-size:20px;text-align:center">
+  <p style="font-size:2.5em;margin:0">🌿</p><h2>Strong &amp; Steady didn't start properly</h2>
+  <p>Your stars and progress are safe. Tap below to restart.</p>
+  <button onclick="location.replace(location.pathname.replace(/[^/]*$/,'')+'?restart='+Date.now())" style="width:100%;min-height:64px;font-size:1em;border-radius:16px;border:0;background:#0e5a57;color:#fff;font-weight:700">Restart the app</button>
+  <button onclick="(window.__steadyRestart||function(){location.reload()})(true);(navigator.serviceWorker?navigator.serviceWorker.getRegistrations():Promise.resolve([])).then(function(r){r.forEach(function(x){x.unregister()})});if(window.caches)caches.keys().then(function(k){k.forEach(function(x){caches.delete(x)})});setTimeout(function(){location.replace(location.pathname.replace(/[^/]*$/,'')+'?repair='+Date.now())},800)" style="width:100%;min-height:56px;font-size:.9em;border-radius:16px;border:2px solid #0e5a57;background:#fff;color:#0e5a57;font-weight:700;margin-top:12px">Repair and restart</button>
+</div>
+<script>setTimeout(function(){if(!window.__steadyOK){var r=document.getElementById("rescue");if(r)r.hidden=false}},6000);</script>
 <script src="data.js"></script>
 <script src="words.js"></script>
 <script src="games.js"></script>
