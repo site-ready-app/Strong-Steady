@@ -203,3 +203,4 @@ ul.plain{padding-left:1.2em}
 
 button.star{background:transparent;font:inherit;color:inherit;width:100%}
 button.star.on{background:var(--gold-soft)}
+a.btn{text-decoration:none}

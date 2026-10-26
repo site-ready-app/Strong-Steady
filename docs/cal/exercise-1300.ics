@@ -1,0 +1,21 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Strong and Steady//Exercise reminder//EN
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+BEGIN:VEVENT
+UID:strong-steady-daily-exercise@site-ready-app.github.io
+DTSTAMP:20261026T000000Z
+DTSTART:20260101T130000
+DTEND:20260101T131500
+RRULE:FREQ=DAILY
+SUMMARY:Exercise time ⭐ Strong & Steady
+DESCRIPTION:A few minutes of exercise earns today's stars. Open the Steady app on your Home Screen.
+URL:https://site-ready-app.github.io/Strong-Steady/
+BEGIN:VALARM
+ACTION:DISPLAY
+DESCRIPTION:Exercise time ⭐
+TRIGGER:PT0M
+END:VALARM
+END:VEVENT
+END:VCALENDAR

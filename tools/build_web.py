@@ -50,3 +50,21 @@ self.addEventListener("fetch", function (e) {
 });
 """ % json.dumps(files), encoding="utf-8")
 print("Built version", version, "build", build, "into docs/")
+
+# Daily calendar alerts for iPhones (Apple Calendar). One file per 15-minute exercise time; the app links to the right one.
+cal = out / "cal"; cal.mkdir(exist_ok=True)
+for m in range(5 * 60, 22 * 60 + 1, 15):
+    hh, mm = divmod(m, 60)
+    ics = "\r\n".join([
+        "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Strong and Steady//Exercise reminder//EN", "CALSCALE:GREGORIAN", "METHOD:PUBLISH",
+        "BEGIN:VEVENT", "UID:strong-steady-daily-exercise@site-ready-app.github.io", "DTSTAMP:20261026T000000Z",
+        f"DTSTART:20260101T{hh:02d}{mm:02d}00", f"DTEND:20260101T{hh:02d}{(mm + 15) % 60:02d}00" if mm + 15 < 60 else f"DTSTART_END_PLACEHOLDER",
+        "RRULE:FREQ=DAILY", "SUMMARY:Exercise time ⭐ Strong & Steady",
+        "DESCRIPTION:A few minutes of exercise earns today's stars. Open the Steady app on your Home Screen.",
+        "URL:https://site-ready-app.github.io/Strong-Steady/",
+        "BEGIN:VALARM", "ACTION:DISPLAY", "DESCRIPTION:Exercise time ⭐", "TRIGGER:PT0M", "END:VALARM",
+        "END:VEVENT", "END:VCALENDAR", ""])
+    end = m + 15; eh, em = divmod(end, 60)
+    ics = ics.replace("DTSTART_END_PLACEHOLDER", f"DTEND:20260101T{eh:02d}{em:02d}00")
+    (cal / f"exercise-{hh:02d}{mm:02d}.ics").write_text(ics, encoding="utf-8")
+print("Calendar alerts written:", len(list(cal.glob("*.ics"))))

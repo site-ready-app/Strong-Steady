@@ -1,7 +1,7 @@
 /* Strong & Steady — app logic. Runs as an Android app (Capacitor, with the native "Steady" plugin
    for steps, reminders, speech and sharing) and as a plain offline web app (manual activity logging). */
 "use strict";
-window.APP_VERSION="1.4.1";
+window.APP_VERSION="1.5";
 
 /* ================= utilities ================= */
 const $=s=>document.querySelector(s);
@@ -25,7 +25,7 @@ const KEY="strong-steady";
 const DEFAULTS={v:1,setup:false,created:null,name:"",seated:false,wake:"08:00",mainTime:"10:30",nudges:true,cutoff:"16:00",
   treat:"a cup of tea and a biscuit",bigTreat:"fish and chips",stepGoal:3000,theme:"teal",size:"L",mode:"auto",voice:true,sound:true,
   levels:{},feel:{},sessions:[],walks:[],steps:{},illDays:{},illUntil:null,illFrom:null,comebackPending:false,
-  journey:{id:"hadrian",start:null,laps:0,seen:0},push:{topic:null,on:false,last:"",lastAt:0,snooze:0},badges:{},checks:[],cel:{days:{},streaks:{}},timeAsk:{snooze:null},family:[],stepsSource:null};
+  journey:{id:"hadrian",start:null,laps:0,seen:0},push:{topic:null,on:false,last:"",lastAt:0,snooze:0},cal:{on:false,time:null},badges:{},checks:[],cel:{days:{},streaks:{}},timeAsk:{snooze:null},family:[],stepsSource:null};
 let S=load();
 function load(){let s={};try{s=JSON.parse(localStorage.getItem(KEY)||"{}")}catch(e){}
   const o=Object.assign(JSON.parse(JSON.stringify(DEFAULTS)),s);o.cel=Object.assign({days:{},streaks:{}},o.cel||{});return o}
@@ -298,7 +298,9 @@ async function stepsPanel(){
 }
 function todayView(){
   const t=dk(),en=encouragement(),sug=suggestRoutine(),st=streak(),wk=weekStats(),ns=nextStop(),ill=isIll(t),rk=rank();
-  const remCard=webReminders()&&S.nudges&&!(S.push&&S.push.on)&&!(S.push&&S.push.snooze>Date.now())?`<div class="card"><b>🔔 Would you like reminders on this phone?</b><p class="small muted" style="margin:4px 0 10px">A gentle nudge at your exercise time, only on days you haven't exercised yet.</p><div class="row"><button class="btn small" id="rem-go">Set up (2 minutes)</button><button class="btn ghost small" id="rem-no">Not now</button></div></div>`:"";
+  const calNeedsUpdate=isIOS()&&webReminders()&&S.cal&&S.cal.on&&S.cal.time!==calSlot(S.mainTime);
+  const remCard=calNeedsUpdate?`<div class="card gold"><b>📅 Your exercise time has changed</b><p class="small muted" style="margin:4px 0 10px">Update your daily Calendar reminder to ${nice(calSlot(S.mainTime))}.</p><button class="btn small" id="rem-go">Update the reminder</button></div>`:
+    webReminders()&&S.nudges&&!(S.push&&S.push.on)&&!(S.cal&&S.cal.on)&&!(S.push&&S.push.snooze>Date.now())?`<div class="card"><b>🔔 Would you like reminders on this phone?</b><p class="small muted" style="margin:4px 0 10px">A gentle nudge at your exercise time, only on days you haven't exercised yet.</p><div class="row"><button class="btn small" id="rem-go">Set up (2 minutes)</button><button class="btn ghost small" id="rem-no">Not now</button></div></div>`:"";
   let h=`<h1>${esc(en.hi)}</h1>${updCard()}<div class="card ${starCount(t)===3?"gold":"hero"}"><p style="margin-top:0"><b>${esc(en.msg)}</b></p>${starsHTML(t)}`;
   if(ill){h+=`<button class="btn" id="better">I'm feeling better</button><button class="btn ghost" id="gentle" style="margin-top:10px">Try a gentle few minutes (optional)</button>`;
     const days=S.illFrom?Math.round((fromKey(t)-fromKey(S.illFrom))/864e5)+1:1;
@@ -327,7 +329,7 @@ function todayView(){
   const ck=$("#chk");if(ck)ck.onclick=()=>checkup();
   const gg=$("#gogames");if(gg)gg.onclick=()=>{TAB="games";renderAll()};
   const ug=$("#updgo");if(ug)ug.onclick=updInstall;
-  const rg=$("#rem-go");if(rg)rg.onclick=reminderSetup;
+  const rg=$("#rem-go");if(rg)rg.onclick=()=>isIOS()?calSetup():reminderSetup();
   const rn=$("#rem-no");if(rn)rn.onclick=()=>{S.push.snooze=Date.now()+7*864e5;save();renderAll()};
   $("#view").querySelectorAll("[data-star]").forEach(b=>b.onclick=()=>{const k=b.dataset.star;
     if(k==="move")return stepsPanel();
@@ -415,9 +417,9 @@ function moreView(){
   <div class="card"><h2>Your day</h2>
   <label class="f" for="s-wake">I usually get up around</label><select id="s-wake">${timeOpts(S.wake,300,720,30)}</select>
   <label class="f" for="s-main">My exercise time</label><select id="s-main">${timeOpts(S.mainTime,360,1260,15)}</select>
-  <div class="toggle"><span><b>Reminders</b><br><span class="small muted">${native.ok?"A gentle nudge if you haven't exercised yet.":webReminders()?(S.push&&S.push.on?"Set up on this phone, through the ntfy app.":"Needs a two-minute setup on this phone."):"Reminders work in the phone app version."}</span></span><input type="checkbox" id="s-nudge" ${S.nudges?"checked":""}></div>
+  <div class="toggle"><span><b>Reminders</b><br><span class="small muted">${native.ok?"A gentle nudge if you haven't exercised yet.":webReminders()?(S.cal&&S.cal.on?"A daily reminder in your Calendar at "+nice(S.cal.time)+".":S.push&&S.push.on?"Set up on this phone, through the ntfy app.":"Needs a quick setup on this phone (below)."):"Reminders work in the phone app version."}</span></span><input type="checkbox" id="s-nudge" ${S.nudges?"checked":""}></div>
   <label class="f" for="s-cut">No reminders after</label><select id="s-cut">${timeOpts(S.cutoff,600,1260,30)}</select>
-  ${webReminders()?`<button class="btn soft small" id="s-rem" style="margin-top:12px">${S.push&&S.push.on?"Reminder set-up and test":"Set up reminders on this phone"}</button>`:""}
+  ${webReminders()?(isIOS()?`<button class="btn soft small" id="s-cal" style="margin-top:12px">${S.cal&&S.cal.on?"Update my daily Calendar reminder":"Add a daily reminder to my Calendar"}</button><button class="link" id="s-rem" style="display:block">Other option: reminders through the ntfy app</button>`:`<button class="btn soft small" id="s-rem" style="margin-top:12px">${S.push&&S.push.on?"Reminder set-up and test":"Set up reminders on this phone"}</button>`):""}
   ${native.ok?`<button class="btn soft small" id="s-test" style="margin-top:12px">Send me a test reminder</button><button class="btn soft small" id="s-batt" style="margin-top:10px">Let reminders through the battery saver</button>`:""}</div>
   <div class="card"><h2>Treats</h2><p class="small muted">What you've earned when you get all three stars, and for big streaks.</p>
   <label class="f" for="s-treat">Daily treat</label><input type="text" id="s-treat" value="${esc(S.treat)}" maxlength="60">
@@ -448,6 +450,7 @@ function moreView(){
   const ts=$("#s-test");if(ts)ts.onclick=()=>{native.testNudge();toast("A test reminder is on its way.")};
   const sb=$("#s-batt");if(sb)sb.onclick=batteryHelp;
   const sr=$("#s-rem");if(sr)sr.onclick=reminderSetup;
+  const sc=$("#s-cal");if(sc)sc.onclick=calSetup;
   const su=$("#s-upd");if(su){native.updStatus().then(st=>{if(st&&$("#upd-st"))$("#upd-st").textContent="You have version "+APP_VERSION+(st.lastCheck?". Last checked "+new Date(st.lastCheck).toLocaleString("en-GB",{weekday:"short",hour:"numeric",minute:"2-digit"})+".":".")});
     su.onclick=async()=>{su.disabled=true;su.textContent="Checking…";const r=await updCheck(true);su.disabled=false;su.textContent="Check for an update now";
       if(r&&r.ready)updInstall();else if(r&&r.latest>r.current)toast("A new version is downloading. It'll be ready shortly.");else if(r&&!r.error)toast("You have the latest version.");else toast("Couldn't check just now. Is the phone online?")}}
@@ -733,6 +736,25 @@ function setupView(step){
 }
 
 
+
+/* ================= iPhone: daily alert in Apple Calendar ================= */
+const isIOS=()=>/iPhone|iPad|iPod/.test(navigator.userAgent)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
+function calSlot(t){const m=Math.round(mins(t)/15)*15,c=Math.min(22*60,Math.max(5*60,m));return hhmm(c)}
+function calLink(){return "cal/exercise-"+calSlot(S.mainTime).replace(":","")+".ics"}
+function calSetup(){
+  S.cal=S.cal||{};const t=calSlot(S.mainTime),changing=S.cal.on&&S.cal.time&&S.cal.time!==t;
+  openLayer(`<div class="dialog plain"><h2>🔔 A daily reminder</h2>
+    ${changing?`<div class="note"><b>First, remove the old one (${nice(S.cal.time)}):</b> open the <b>Calendar</b> app, tap the <b>Exercise time</b> event, tap <b>Delete Event</b>, then <b>Delete All Future Events</b>. Then come back here.</div>`:""}
+    <p>Your iPhone's own Calendar will remind you every day at <b>${nice(t)}</b>.</p>
+    <ol class="steps-list"><li>Tap <b>Add to my Calendar</b> below.</li><li>Tap <b>Add All</b> (or <b>Add to Calendar</b>) on the screen that opens.</li><li>Come back to Steady.</li></ol>
+    <div class="stack"><a class="btn" id="cal-add" href="${calLink()}" target="_blank" rel="noopener">📅 Add to my Calendar</a>
+    <button class="btn soft" id="cal-done">I've added it</button><button class="btn ghost" id="cal-x">Not now</button></div>
+    <p class="small muted">It reminds you every day at that time, even if you've already exercised. If you change your exercise time, Steady will help you update it.</p></div>`);
+  $("#cal-done").onclick=()=>{S.cal={on:true,time:t};S.push=S.push||{};S.push.snooze=0;save();closeLayer();renderAll();
+    celebrate([{emoji:"📅",title:"Daily reminder added!",text:"Your iPhone will remind you at "+nice(t)+" every day. Tap the reminder to open Steady.",ok:"Lovely"}])};
+  $("#cal-x").onclick=()=>{closeLayer()};
+}
+
 /* ================= reminders for the iPhone / web version (sent by GitHub through ntfy) ================= */
 const NTFY="https://ntfy.sh",REG_TOPIC="strong-steady-reg-q7v2k9wx4m";
 const REM_PUB="MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA8zi9KR0nErQqrlBCx/TNSc/eyOduKbFIKKzE13hm7PpK1wPhs8hS3ePcloTasHIYt2BKJbhH7Yz6D6Qs8i3ZXqoTejGdnRmoTZbx3Qx5v1egIsTDakoBJSwltIpSFvMdfhPZeHNLipFGaNj05eStTWkZwqB+1TNNNf5Pw/KLW3f86audBAwWOLOg8vaic1QMghZf3TRBn3VH73IigW7IWZE0qH8tYyWDBEHfQWC5BOekZs5/55ErxolW1tlnp+Zvq5Ay7sPcDBrOsBvvOt6T5VjU6j7f+EZP+KyMMxkaBlfUKkSAxY81swGK5rU3/zHHT7A9JfgHeFTF+HpYrqx94QIDAQAB";
@@ -815,7 +837,7 @@ function updatedNotice(){
     celebrate([{emoji:"✨",title:"The app has been updated",text:"You're now on version "+APP_VERSION+". "+(WHATS_NEW[APP_VERSION]||"Everything you've done so far is safe."),ok:"Lovely"}])}
   else if(!last){S.lastVersion=APP_VERSION;save()}
 }
-const WHATS_NEW={"1.4":"Behind the scenes: the app now also works on iPhones, with reminders through the free ntfy app.","1.3":"The app now keeps itself up to date. New versions arrive by themselves, usually within the hour."};
+const WHATS_NEW={"1.5":"On iPhone, you can now add a daily reminder to your Calendar with one tap.","1.4":"Behind the scenes: the app now also works on iPhones, with reminders through the free ntfy app.","1.3":"The app now keeps itself up to date. New versions arrive by themselves, usually within the hour."};
 
 /* ================= steps refresh ================= */
 async function refreshSteps(quiet){
