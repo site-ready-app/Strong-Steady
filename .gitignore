@@ -4,3 +4,4 @@ android/
 *.apk
 *.aab
 .DS_Store
+__pycache__/
