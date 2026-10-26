@@ -1,0 +1,71 @@
+name: Reminders (iPhone and web version)
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+    inputs:
+      selftest:
+        description: "Run the end-to-end self-test instead"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: reminders
+  cancel-in-progress: false
+
+jobs:
+  remind:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: reminders
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install --quiet cryptography
+
+      - name: Load the reminder list
+        if: ${{ !inputs.selftest }}
+        uses: actions/cache/restore@v4
+        with:
+          path: state
+          key: reminders-state-${{ github.run_id }}
+          restore-keys: reminders-state-
+
+      - name: Send any reminders that are due
+        if: ${{ !inputs.selftest }}
+        env:
+          KS: ${{ secrets.STEADY_KEYSTORE_B64 }}
+        run: python3 reminders/send.py
+
+      - name: Save the reminder list
+        if: ${{ !inputs.selftest }}
+        uses: actions/cache/save@v4
+        with:
+          path: state
+          key: reminders-state-${{ github.run_id }}
+
+      - name: Self-test
+        if: ${{ inputs.selftest }}
+        env:
+          KS: ${{ secrets.STEADY_KEYSTORE_B64 }}
+        run: cd reminders && python3 selftest.py
+
+      - name: Keep the schedule alive (GitHub pauses timers after 60 quiet days)
+        if: ${{ !inputs.selftest }}
+        run: |
+          if [ "$(date -u +%d)" = "01" ] && [ "$(date -u +%H)" = "03" ] && [ "$(date -u +%M)" -lt 15 ]; then
+            date -u > reminders/heartbeat.txt
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add reminders/heartbeat.txt && git commit -m "Reminders: monthly keep-alive" && git push || true
+          fi

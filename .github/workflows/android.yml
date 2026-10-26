@@ -3,6 +3,7 @@ name: Build the Android app
 on:
   push:
     branches: [main]
+    paths-ignore: ["reminders/**"]
   workflow_dispatch:
 
 permissions:
@@ -42,7 +43,7 @@ jobs:
           KS="$(printf '%s' "$KS" | tr -d '\r\n\t ')"
           if [ -n "$KS" ]; then
             case "$KS" in
-              *:*) PW="${KS%%:*}"; KS="${KS#*:}" ;;
+              *:*) PW="${KS%%:*}"; KS="${KS#*:}"; KS="${KS%%:*}" ;;   # "password:key[:reminder key]"
               *)   PW="$(printf '%s' "$PW_OLD" | tr -d '\r\n\t ')" ;;
             esac
             printf '%s' "$KS" | base64 -d > "$RUNNER_TEMP/upload.jks"

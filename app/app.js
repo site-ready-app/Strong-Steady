@@ -1,7 +1,7 @@
 /* Strong & Steady — app logic. Runs as an Android app (Capacitor, with the native "Steady" plugin
    for steps, reminders, speech and sharing) and as a plain offline web app (manual activity logging). */
 "use strict";
-window.APP_VERSION="1.3";
+window.APP_VERSION="1.4";
 
 /* ================= utilities ================= */
 const $=s=>document.querySelector(s);
@@ -25,11 +25,11 @@ const KEY="strong-steady";
 const DEFAULTS={v:1,setup:false,created:null,name:"",seated:false,wake:"08:00",mainTime:"10:30",nudges:true,cutoff:"16:00",
   treat:"a cup of tea and a biscuit",bigTreat:"fish and chips",stepGoal:3000,theme:"teal",size:"L",mode:"auto",voice:true,sound:true,
   levels:{},feel:{},sessions:[],walks:[],steps:{},illDays:{},illUntil:null,illFrom:null,comebackPending:false,
-  journey:{id:"hadrian",start:null,laps:0,seen:0},badges:{},checks:[],cel:{days:{},streaks:{}},timeAsk:{snooze:null},family:[],stepsSource:null};
+  journey:{id:"hadrian",start:null,laps:0,seen:0},push:{topic:null,on:false,last:"",lastAt:0,snooze:0},badges:{},checks:[],cel:{days:{},streaks:{}},timeAsk:{snooze:null},family:[],stepsSource:null};
 let S=load();
 function load(){let s={};try{s=JSON.parse(localStorage.getItem(KEY)||"{}")}catch(e){}
   const o=Object.assign(JSON.parse(JSON.stringify(DEFAULTS)),s);o.cel=Object.assign({days:{},streaks:{}},o.cel||{});return o}
-function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}syncNative()}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}syncNative();schedulePush()}
 function applyLook(){const r=document.documentElement;r.dataset.theme=S.theme;r.dataset.size=S.size;r.dataset.mode=S.mode}
 
 /* ================= native bridge ================= */
@@ -298,6 +298,7 @@ async function stepsPanel(){
 }
 function todayView(){
   const t=dk(),en=encouragement(),sug=suggestRoutine(),st=streak(),wk=weekStats(),ns=nextStop(),ill=isIll(t),rk=rank();
+  const remCard=webReminders()&&S.nudges&&!(S.push&&S.push.on)&&!(S.push&&S.push.snooze>Date.now())?`<div class="card"><b>🔔 Would you like reminders on this phone?</b><p class="small muted" style="margin:4px 0 10px">A gentle nudge at your exercise time, only on days you haven't exercised yet.</p><div class="row"><button class="btn small" id="rem-go">Set up (2 minutes)</button><button class="btn ghost small" id="rem-no">Not now</button></div></div>`:"";
   let h=`<h1>${esc(en.hi)}</h1>${updCard()}<div class="card ${starCount(t)===3?"gold":"hero"}"><p style="margin-top:0"><b>${esc(en.msg)}</b></p>${starsHTML(t)}`;
   if(ill){h+=`<button class="btn" id="better">I'm feeling better</button><button class="btn ghost" id="gentle" style="margin-top:10px">Try a gentle few minutes (optional)</button>`;
     const days=S.illFrom?Math.round((fromKey(t)-fromKey(S.illFrom))/864e5)+1:1;
@@ -305,7 +306,7 @@ function todayView(){
   else if(sug){const r=R(sug);h+=`<button class="btn" data-go="${sug}">▶ Start ${esc(r.name)} · about ${planMinutes(sug)} min</button>`}
   else if(!dayStars(t).move){h+=`<button class="btn" id="logw">👟 I've been for a walk</button>`}
   else h+=`<button class="btn soft" data-go="mix">Fancy a bonus Quick mix?</button>`;
-  h+=`</div>`;
+  h+=`</div>`+remCard;
   if(!ill&&(sug||dayStars(t).move))h+=`<button class="btn soft" id="logw" style="margin-bottom:14px">👟 Add a walk or other activity</button>`;
   h+=gamesToday()?`<button class="btn gold" id="gogames" style="margin-bottom:14px">🎮 Games unlocked: play now</button>`:`<div class="card"><b>🎮 Games are locked today.</b> <span class="muted">Do any exercise session to unlock them.</span></div>`;
   if(due())h+=`<div class="card"><h3>📋 Your monthly check-up is due</h3><p>Three quick tests that show how much stronger and steadier you're getting.</p><button class="btn soft" id="chk">Do my check-up</button></div>`;
@@ -326,6 +327,8 @@ function todayView(){
   const ck=$("#chk");if(ck)ck.onclick=()=>checkup();
   const gg=$("#gogames");if(gg)gg.onclick=()=>{TAB="games";renderAll()};
   const ug=$("#updgo");if(ug)ug.onclick=updInstall;
+  const rg=$("#rem-go");if(rg)rg.onclick=reminderSetup;
+  const rn=$("#rem-no");if(rn)rn.onclick=()=>{S.push.snooze=Date.now()+7*864e5;save();renderAll()};
   $("#view").querySelectorAll("[data-star]").forEach(b=>b.onclick=()=>{const k=b.dataset.star;
     if(k==="move")return stepsPanel();
     const rid=k==="strength"?(S.seated?"chair":"strength"):(S.seated?"flex":"balance");
@@ -412,8 +415,9 @@ function moreView(){
   <div class="card"><h2>Your day</h2>
   <label class="f" for="s-wake">I usually get up around</label><select id="s-wake">${timeOpts(S.wake,300,720,30)}</select>
   <label class="f" for="s-main">My exercise time</label><select id="s-main">${timeOpts(S.mainTime,360,1260,15)}</select>
-  <div class="toggle"><span><b>Reminders</b><br><span class="small muted">${native.ok?"A gentle nudge if you haven't exercised yet.":"Reminders work in the phone app version."}</span></span><input type="checkbox" id="s-nudge" ${S.nudges?"checked":""}></div>
+  <div class="toggle"><span><b>Reminders</b><br><span class="small muted">${native.ok?"A gentle nudge if you haven't exercised yet.":webReminders()?(S.push&&S.push.on?"Set up on this phone, through the ntfy app.":"Needs a two-minute setup on this phone."):"Reminders work in the phone app version."}</span></span><input type="checkbox" id="s-nudge" ${S.nudges?"checked":""}></div>
   <label class="f" for="s-cut">No reminders after</label><select id="s-cut">${timeOpts(S.cutoff,600,1260,30)}</select>
+  ${webReminders()?`<button class="btn soft small" id="s-rem" style="margin-top:12px">${S.push&&S.push.on?"Reminder set-up and test":"Set up reminders on this phone"}</button>`:""}
   ${native.ok?`<button class="btn soft small" id="s-test" style="margin-top:12px">Send me a test reminder</button><button class="btn soft small" id="s-batt" style="margin-top:10px">Let reminders through the battery saver</button>`:""}</div>
   <div class="card"><h2>Treats</h2><p class="small muted">What you've earned when you get all three stars, and for big streaks.</p>
   <label class="f" for="s-treat">Daily treat</label><input type="text" id="s-treat" value="${esc(S.treat)}" maxlength="60">
@@ -443,6 +447,7 @@ function moreView(){
   bind("#s-size","size");bind("#s-theme","theme");bind("#s-mode","mode");bind("#s-voice","voice",el=>el.checked);bind("#s-sound","sound",el=>el.checked);
   const ts=$("#s-test");if(ts)ts.onclick=()=>{native.testNudge();toast("A test reminder is on its way.")};
   const sb=$("#s-batt");if(sb)sb.onclick=batteryHelp;
+  const sr=$("#s-rem");if(sr)sr.onclick=reminderSetup;
   const su=$("#s-upd");if(su){native.updStatus().then(st=>{if(st&&$("#upd-st"))$("#upd-st").textContent="You have version "+APP_VERSION+(st.lastCheck?". Last checked "+new Date(st.lastCheck).toLocaleString("en-GB",{weekday:"short",hour:"numeric",minute:"2-digit"})+".":".")});
     su.onclick=async()=>{su.disabled=true;su.textContent="Checking…";const r=await updCheck(true);su.disabled=false;su.textContent="Check for an update now";
       if(r&&r.ready)updInstall();else if(r&&r.latest>r.current)toast("A new version is downloading. It'll be ready shortly.");else if(r&&!r.error)toast("You have the latest version.");else toast("Couldn't check just now. Is the phone online?")}}
@@ -727,6 +732,55 @@ function setupView(step){
     save();setupView(step+1)};
 }
 
+
+/* ================= reminders for the iPhone / web version (sent by GitHub through ntfy) ================= */
+const NTFY="https://ntfy.sh",REG_TOPIC="strong-steady-reg-q7v2k9wx4m";
+const REM_PUB="MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA8zi9KR0nErQqrlBCx/TNSc/eyOduKbFIKKzE13hm7PpK1wPhs8hS3ePcloTasHIYt2BKJbhH7Yz6D6Qs8i3ZXqoTejGdnRmoTZbx3Qx5v1egIsTDakoBJSwltIpSFvMdfhPZeHNLipFGaNj05eStTWkZwqB+1TNNNf5Pw/KLW3f86audBAwWOLOg8vaic1QMghZf3TRBn3VH73IigW7IWZE0qH8tYyWDBEHfQWC5BOekZs5/55ErxolW1tlnp+Zvq5Ay7sPcDBrOsBvvOt6T5VjU6j7f+EZP+KyMMxkaBlfUKkSAxY81swGK5rU3/zHHT7A9JfgHeFTF+HpYrqx94QIDAQAB";
+const NTFY_IOS="https://apps.apple.com/gb/app/ntfy/id1625396347",NTFY_ANDROID="https://play.google.com/store/apps/details?id=io.heckel.ntfy";
+const webReminders=()=>!native.ok&&/^https?:$/.test(location.protocol);
+function pushTopic(){S.push=S.push||{};if(!S.push.topic){const a=new Uint8Array(20);crypto.getRandomValues(a);S.push.topic="ss-"+[...a].map(b=>"abcdefghijkmnpqrstuvwxyz23456789"[b%32]).join("");try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}return S.push.topic}
+let pushTimer=null;
+function schedulePush(){if(!webReminders()||!S.push||!S.push.on)return;clearTimeout(pushTimer);pushTimer=setTimeout(()=>pushState(false),1500)}
+function pushCfg(){const t=dk(),last=S.sessions.reduce((m,x)=>x.r!=="gentle"&&x.d>m?x.d:m,""),ns=nextStop();
+  return {u:pushTopic(),t:S.mainTime,c:S.cutoff,n:S.nudges?1:0,i:S.illUntil==="open"?"open":(isIll(t)?t:""),d:last,
+    z:(Intl.DateTimeFormat().resolvedOptions().timeZone||"Europe/London").slice(0,32),s:streak(),x:ns?ns.stop.name.split(",")[0].slice(0,22):""}}
+async function encryptForReminders(obj){
+  const der=Uint8Array.from(atob(REM_PUB),c=>c.charCodeAt(0));
+  const key=await crypto.subtle.importKey("spki",der,{name:"RSA-OAEP",hash:"SHA-256"},false,["encrypt"]);
+  const ct=await crypto.subtle.encrypt({name:"RSA-OAEP"},key,new TextEncoder().encode(JSON.stringify(obj)));
+  let bin="";new Uint8Array(ct).forEach(b=>bin+=String.fromCharCode(b));return btoa(bin)}
+async function pushState(force){
+  if(!webReminders()||!S.setup||!S.push||!S.push.on||!crypto.subtle)return false;
+  const cfg=pushCfg(),sig=JSON.stringify(cfg);
+  if(!force&&sig===S.push.last&&Date.now()-(S.push.lastAt||0)<6*3600e3)return true;
+  try{const body=await encryptForReminders(Object.assign(cfg,{v:Math.floor(Date.now()/1000)}));
+    const r=await fetch(NTFY+"/"+REG_TOPIC,{method:"POST",body});if(!r.ok)return false;
+    S.push.last=sig;S.push.lastAt=Date.now();try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}return true}catch(e){return false}}
+async function testReminder(){
+  const u=pushTopic(),q="?title="+encodeURIComponent("Strong & Steady test")+"&tags=muscle&click="+encodeURIComponent(location.href.split("#")[0]);
+  try{const r=await fetch(NTFY+"/"+u+q,{method:"POST",body:"Reminders are working. You'll get a gentle nudge at your exercise time if you haven't exercised yet."});return r.ok}catch(e){return false}}
+function reminderSetup(){
+  const u=pushTopic(),ios=/iPhone|iPad|iPod/.test(navigator.userAgent);
+  openLayer(`<div class="dialog plain"><h2>🔔 Reminders on this phone</h2><p>A free app called <b>ntfy</b> shows the reminders. It takes about two minutes to set up, just once.</p>
+    <ol class="steps-list"><li><b>Install ntfy</b> (it's free).<br><a class="btn soft small" style="margin-top:6px" href="${ios?NTFY_IOS:NTFY_ANDROID}" target="_blank" rel="noopener">Get ntfy</a></li>
+    <li>Open ntfy and allow notifications when it asks.</li>
+    <li>Tap <b>+</b> and type in your reminder code exactly as shown. Leave everything else as it is, then tap <b>Subscribe</b>.<div class="treat" style="font-family:monospace;font-size:1em;white-space:nowrap;overflow-x:auto;user-select:all;-webkit-user-select:all;text-align:center">${u}</div><button class="btn ghost small" id="rs-copy">Copy the code</button></li>
+    <li>Come back here and send yourself a test.</li></ol>
+    <div class="stack"><button class="btn" id="rs-test">Send a test reminder</button><p class="small muted" id="rs-st"></p><button class="btn ghost" id="rs-x">Close</button></div>
+    <p class="small muted">Only the times you chose and whether you've exercised are shared with the reminder service, never your name or progress.</p></div>`);
+  $("#rs-copy").onclick=()=>{navigator.clipboard&&navigator.clipboard.writeText(u).then(()=>toast("Code copied"),()=>{})};
+  $("#rs-x").onclick=()=>{closeLayer();renderAll()};
+  $("#rs-test").onclick=async()=>{$("#rs-st").textContent="Sending…";const ok=await testReminder();
+    if(!ok){$("#rs-st").textContent="It couldn't be sent. Is the phone online?";return}
+    $("#rs-st").innerHTML="Sent! <b>Did a notification from ntfy arrive?</b>";
+    const yes=document.createElement("button");yes.className="btn gold";yes.textContent="Yes, it arrived";
+    const no=document.createElement("button");no.className="btn soft";no.textContent="No, nothing came";
+    $("#rs-st").after(yes,no);
+    yes.onclick=async()=>{S.push.on=true;S.nudges=true;save();await pushState(true);closeLayer();renderAll();
+      celebrate([{emoji:"🔔",title:"Reminders are set up!",text:"You'll get a gentle nudge around "+nice(S.mainTime)+" on days you haven't exercised yet. Change the time in Settings (⚙️) whenever you like.",ok:"Lovely"}])};
+    no.onclick=()=>{$("#rs-st").innerHTML="Check that: the code in ntfy matches exactly; ntfy is allowed to show notifications (iPhone Settings → Notifications → ntfy); and the phone isn't on Do Not Disturb. Then try the test again."}};
+}
+
 /* ================= app updates (phone app installed from GitHub) ================= */
 let UPD=null;
 async function updCheck(force){
@@ -760,7 +814,7 @@ function updatedNotice(){
     celebrate([{emoji:"✨",title:"The app has been updated",text:"You're now on version "+APP_VERSION+". "+(WHATS_NEW[APP_VERSION]||"Everything you've done so far is safe."),ok:"Lovely"}])}
   else if(!last){S.lastVersion=APP_VERSION;save()}
 }
-const WHATS_NEW={"1.3":"The app now keeps itself up to date. New versions arrive by themselves, usually within the hour."};
+const WHATS_NEW={"1.4":"Behind the scenes: the app now also works on iPhones, with reminders through the free ntfy app.","1.3":"The app now keeps itself up to date. New versions arrive by themselves, usually within the hour."};
 
 /* ================= steps refresh ================= */
 async function refreshSteps(quiet){
@@ -794,11 +848,11 @@ if(hosted){
 let lastDay=dk();
 function onWake(){
   if(dk()!==lastDay){lastDay=dk();if(!P)renderAll()}
-  rollIll();refreshSteps();updCheck(false);if(hosted){checkForUpdate();applyUpdateIfSafe()}
+  rollIll();refreshSteps();updCheck(false);pushState(false);if(hosted){checkForUpdate();applyUpdateIfSafe()}
 }
 document.addEventListener("visibilitychange",()=>{if(!document.hidden)onWake();
   else if(UPD&&UPD.ready&&UPD.canInstall&&!P){try{S.cel.preUpdate=APP_VERSION;save()}catch(e){}native.updQuiet()}});
 setInterval(()=>{if(!document.hidden)refreshSteps()},5*60000);
 applyLook();rollIll();renderAll();
-if(S.setup){refreshSteps();setTimeout(evaluate,500);setTimeout(updatedNotice,900);setTimeout(()=>updCheck(false),3000);syncNative()}
+if(S.setup){refreshSteps();setTimeout(()=>pushState(false),2000);setTimeout(evaluate,500);setTimeout(updatedNotice,900);setTimeout(()=>updCheck(false),3000);syncNative()}
 window.__steady={state:()=>S,set:o=>{Object.assign(S,o);save();applyLook();renderAll()},evaluate,streak,journeyMiles,buildPlan};
