@@ -1,7 +1,7 @@
 /* Strong & Steady — app logic. Runs as an Android app (Capacitor, with the native "Steady" plugin
    for steps, reminders, speech and sharing) and as a plain offline web app (manual activity logging). */
 "use strict";
-window.APP_VERSION="1.5.6";
+window.APP_VERSION="1.6";
 
 /* ================= utilities ================= */
 const $=s=>document.querySelector(s);
@@ -44,6 +44,8 @@ const native={
   async steps(){if(!NP)return null;try{return await NP.getSteps()}catch(e){return null}},
   configure(cfg){if(NP)NP.configure({config:JSON.stringify(cfg)}).catch(()=>{})},
   speak(t){if(NP){NP.speak({text:t}).catch(()=>{});return true}return false},
+  async voices(){if(!NP)return null;try{return await NP.voices()}catch(e){return null}},
+  async setVoice(id){if(!NP)return false;try{return (await NP.setVoice({id})).ok}catch(e){return false}},
   stopSpeaking(){if(NP)NP.stopSpeaking().catch(()=>{})},
   awake(on){if(NP)NP.keepAwake({on:!!on}).catch(()=>{})},
   share(t){if(NP){NP.share({text:t}).catch(()=>{});return true}return false},
@@ -150,11 +152,33 @@ function encouragement(){
 }
 
 /* ================= speech, sound, confetti ================= */
-let voice=null;
-function pickVoice(){if(!window.speechSynthesis)return;const v=speechSynthesis.getVoices();voice=v.find(x=>/en-GB/i.test(x.lang))||v.find(x=>/^en/i.test(x.lang))||null}
-if(window.speechSynthesis){pickVoice();speechSynthesis.onvoiceschanged=pickVoice}
+/* ---------- voices: default to a soft British female voice when the phone has one ---------- */
+/* Phones don't label voices as female or male, so known voice names are recognised. */
+const FEMALE_VOICES=[/serena/i,/kate/i,/martha/i,/stephanie/i,/fiona/i,/moira/i,/karen/i,/tessa/i,/samantha/i,/female/i,/en-gb-x-gba/i,/en-gb-x-gbc/i,/en-gb-x-gbg/i,/libby/i,/sonia/i,/hazel/i,/susan/i,/mia/i,/maisie/i];
+const MALE_VOICES=[/daniel/i,/arthur/i,/oliver/i,/jamie/i,/fred/i,/\btom\b/i,/alex/i,/aaron/i,/(^|[^e])male/i,/en-gb-x-gbb/i,/en-gb-x-gbd/i,/en-gb-x-rjs/i,/ryan/i,/george/i,/thomas/i];
+function voiceGender(id){if(FEMALE_VOICES.some(r=>r.test(id)))return "female";if(MALE_VOICES.some(r=>r.test(id)))return "male";return ""}
+function voiceScore(v){let sc=0;const fi=FEMALE_VOICES.findIndex(r=>r.test(v.id));if(fi>=0)sc+=40-fi;else if(voiceGender(v.id)==="male")sc-=30;
+  if(/en-GB/i.test(v.lang))sc+=20;if(v.local!==false)sc+=5;if((v.quality||0)>=400)sc+=2;if(/compact|eloquence|novelty/i.test(v.id))sc-=15;return sc}
+function voiceLabel(v,i){let n=v.id;const m=n.match(/^[a-z]{2}-[a-z]{2}-x-([a-z]{3})/i);
+  if(m)n="Voice "+m[1].toUpperCase();else n=n.replace(/\(.*?\)/g,"").replace(/com\.apple\.(voice|ttsbundle)\.[a-z.]*\.?/i,"").replace(/[-_.]/g," ").trim()||("Voice "+(i+1));
+  const acc=/en-GB/i.test(v.lang)?"British":/en-IE/i.test(v.lang)?"Irish":/en-AU/i.test(v.lang)?"Australian":/en-US/i.test(v.lang)?"American":"English";
+  const g=voiceGender(v.id);return n+" · "+acc+(g?", "+g:"")}
+let voice=null,VOICES=[];
+async function loadVoices(){
+  if(native.ok){const r=await native.voices();VOICES=r&&r.voices?r.voices:[];return VOICES}
+  if(!window.speechSynthesis)return VOICES=[];
+  VOICES=speechSynthesis.getVoices().filter(v=>/^en/i.test(v.lang)).map(v=>({id:v.name,lang:v.lang,local:v.localService,_v:v}));return VOICES}
+function bestVoice(list){return [...list].sort((a,b)=>voiceScore(b)-voiceScore(a))[0]||null}
+let voiceTries=0;
+async function applyVoice(){
+  const list=await loadVoices();if(!list.length){if(native.ok&&voiceTries++<6)setTimeout(applyVoice,2000);return}
+  let pick=S.voiceId?list.find(v=>v.id===S.voiceId):null;
+  if(!pick){pick=bestVoice(list);if(!pick)return;S.voiceId=pick.id;try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
+  if(native.ok)await native.setVoice(pick.id);else voice=pick._v||null}
+function pickVoice(){applyVoice()}
+if(window.speechSynthesis&&!NATIVE){pickVoice();speechSynthesis.onvoiceschanged=pickVoice}
 function say(t){if(!S.voice||!t)return;if(native.speak(t))return;
-  if(!window.speechSynthesis)return;try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(t);u.rate=.92;if(voice)u.voice=voice;u.lang="en-GB";speechSynthesis.speak(u)}catch(e){}}
+  if(!window.speechSynthesis)return;try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(t);u.rate=.9;u.pitch=1;if(voice){u.voice=voice;u.lang=voice.lang}else u.lang="en-GB";speechSynthesis.speak(u)}catch(e){}}
 function hush(){native.stopSpeaking();try{window.speechSynthesis&&speechSynthesis.cancel()}catch(e){}}
 let AC=null;
 function tone(seq){if(!S.sound)return;try{AC=AC||new (window.AudioContext||window.webkitAudioContext)();const t0=AC.currentTime;
@@ -432,6 +456,7 @@ function moreView(){
   <label class="f" for="s-theme">Colours</label><select id="s-theme"><option value="teal" ${S.theme==="teal"?"selected":""}>Teal</option><option value="heather" ${S.theme==="heather"?"selected":""}>Heather</option><option value="slate" ${S.theme==="slate"?"selected":""}>Slate blue</option></select>
   <label class="f" for="s-mode">Light or dark</label><select id="s-mode"><option value="auto" ${S.mode==="auto"?"selected":""}>Same as the phone</option><option value="light" ${S.mode==="light"?"selected":""}>Always light</option><option value="dark" ${S.mode==="dark"?"selected":""}>Always dark</option></select>
   <div class="toggle"><span><b>Spoken instructions</b></span><input type="checkbox" id="s-voice" ${S.voice?"checked":""}></div>
+  <div class="setrow"><b>Voice</b><br><span class="small muted">Tap <b>Try</b> to hear each one, then choose the one you find clearest.</span><div id="s-voices" class="stack" style="margin-top:8px"><span class="small muted">Loading voices…</span></div></div>
   <div class="toggle"><span><b>Sounds</b></span><input type="checkbox" id="s-sound" ${S.sound?"checked":""}></div></div>
   <div class="card"><h2>💌 Messages from family</h2><p class="small muted">Family can leave messages that pop up at big moments, like a 7-day streak or the end of a journey.</p>
   ${S.family.map((m,i)=>`<div class="setrow"><b>${esc(m.from||"Family")}</b>: ${esc(m.text)} ${m.audio?"🎙️":""}<br><span class="small muted">${({any:"Any big moment",streak:"Streaks",journey:"Finishing a journey",pb:"A personal best"})[m.when]}</span> <button class="link" data-del="${i}">Remove</button></div>`).join("")}
@@ -454,6 +479,7 @@ function moreView(){
   const sb=$("#s-batt");if(sb)sb.onclick=batteryHelp;
   const sr=$("#s-rem");if(sr)sr.onclick=reminderSetup;
   const sc=$("#s-cal");if(sc)sc.onclick=calSetup;
+  drawVoices();
   const su=$("#s-upd");if(su){native.updStatus().then(st=>{if(st&&$("#upd-st"))$("#upd-st").textContent="You have version "+APP_VERSION+(st.lastCheck?". Last checked "+new Date(st.lastCheck).toLocaleString("en-GB",{weekday:"short",hour:"numeric",minute:"2-digit"})+".":".")});
     su.onclick=async()=>{su.disabled=true;su.textContent="Checking…";const r=await updCheck(true);su.disabled=false;su.textContent="Check for an update now";
       if(r&&r.ready)updInstall();else if(r&&r.latest>r.current)toast("A new version is downloading. It'll be ready shortly.");else if(r&&!r.error)toast("You have the latest version.");else toast("Couldn't check just now. Is the phone online?")}}
@@ -501,6 +527,18 @@ function addFamily(){
     S.family.push({id:Date.now(),from:$("#fm-from").value.trim(),text:text||"(voice message)",audio,when:$("#fm-when").value});save();closeLayer();renderAll();toast("Message saved. It'll pop up at the right moment.")};
   $("#fm-x").onclick=closeLayer;
 }
+
+async function drawVoices(){
+  const box=$("#s-voices");if(!box)return;const list=await loadVoices();
+  if(!list.length){box.innerHTML=`<span class="small muted">This phone hasn't shared its voices yet. Try again in a moment.</span>`;return}
+  const sorted=[...list].sort((a,b)=>voiceScore(b)-voiceScore(a)).slice(0,8);
+  box.innerHTML=sorted.map((v,i)=>`<div class="row" style="align-items:center"><button class="opt" data-vsel="${i}" aria-pressed="${v.id===S.voiceId}" style="flex:3">${esc(voiceLabel(v,i))}</button><button class="btn soft small" data-vtry="${i}" style="flex:1;width:auto">▶ Try</button></div>`).join("");
+  const sample="Hello. Let's get you strong and steady today. Lift your knee, and hold.";
+  box.querySelectorAll("[data-vtry]").forEach(b=>b.onclick=async()=>{const v=sorted[+b.dataset.vtry];await useVoice(v);const was=S.voice;S.voice=true;say(sample);S.voice=was;
+    if(S.voiceId!==v.id){const keep=S.voiceId;setTimeout(()=>{const k=list.find(x=>x.id===keep);if(k)useVoice(k)},6000)}});
+  box.querySelectorAll("[data-vsel]").forEach(b=>b.onclick=async()=>{const v=sorted[+b.dataset.vsel];S.voiceId=v.id;save();await useVoice(v);drawVoices();toast("Voice chosen")});
+}
+async function useVoice(v){if(native.ok)await native.setVoice(v.id);else voice=v._v||null}
 
 /* ================= unwell + walks ================= */
 function illDialog(){
@@ -866,7 +904,7 @@ function updatedNotice(){
     celebrate([{emoji:"✨",title:"The app has been updated",text:"You're now on version "+APP_VERSION+". "+(WHATS_NEW[APP_VERSION]||"Everything you've done so far is safe."),ok:"Lovely"}])}
   else if(!last){S.lastVersion=APP_VERSION;save()}
 }
-const WHATS_NEW={"1.5.3":"Setting up the daily Calendar reminder on iPhone is now simpler, with a picture showing exactly what to tap.","1.5.2":"The daily Calendar reminder now opens safely, and the app can restart itself if anything goes wrong.","1.5":"On iPhone, you can now add a daily reminder to your Calendar with one tap.","1.4":"Behind the scenes: the app now also works on iPhones, with reminders through the free ntfy app.","1.3":"The app now keeps itself up to date. New versions arrive by themselves, usually within the hour."};
+const WHATS_NEW={"1.6":"You can now choose the voice that reads out the exercises. Have a listen in Settings (⚙️).","1.5.3":"Setting up the daily Calendar reminder on iPhone is now simpler, with a picture showing exactly what to tap.","1.5.2":"The daily Calendar reminder now opens safely, and the app can restart itself if anything goes wrong.","1.5":"On iPhone, you can now add a daily reminder to your Calendar with one tap.","1.4":"Behind the scenes: the app now also works on iPhones, with reminders through the free ntfy app.","1.3":"The app now keeps itself up to date. New versions arrive by themselves, usually within the hour."};
 
 /* ================= steps refresh ================= */
 async function refreshSteps(quiet){
@@ -930,6 +968,7 @@ document.addEventListener("visibilitychange",()=>{if(!document.hidden)onWake();
   else if(UPD&&UPD.ready&&UPD.canInstall&&!P){try{S.cel.preUpdate=APP_VERSION;save()}catch(e){}native.updQuiet()}});
 setInterval(()=>{if(!document.hidden)refreshSteps()},5*60000);
 applyLook();rollIll();renderAll();
+if(native.ok)setTimeout(applyVoice,1500);
 if(S.setup){refreshSteps();setTimeout(()=>pushState(false),2000);setTimeout(evaluate,500);setTimeout(updatedNotice,900);setTimeout(()=>updCheck(false),3000);syncNative()}
 window.__steadyOK=true;
 window.__steady={state:()=>S,set:o=>{Object.assign(S,o);save();applyLook();renderAll()},evaluate,streak,journeyMiles,buildPlan};

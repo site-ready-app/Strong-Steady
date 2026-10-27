@@ -36,6 +36,7 @@ public class SteadyPlugin extends Plugin {
                 int r = tts.setLanguage(Locale.UK);
                 if (r == TextToSpeech.LANG_MISSING_DATA || r == TextToSpeech.LANG_NOT_SUPPORTED) tts.setLanguage(Locale.ENGLISH);
                 tts.setSpeechRate(0.9f);
+                applySavedVoice();
                 ttsReady = true;
             }
         });
@@ -44,6 +45,38 @@ public class SteadyPlugin extends Plugin {
     }
 
     @Override protected void handleOnDestroy() { if (tts != null) tts.shutdown(); }
+
+    private void applySavedVoice() {
+        String name = StepStore.prefs(getContext()).getString("voiceName", "");
+        if (name.isEmpty() || tts == null) return;
+        try { for (android.speech.tts.Voice v : tts.getVoices()) if (v.getName().equals(name)) { tts.setVoice(v); return; } } catch (Exception ignored) {}
+    }
+
+    /** English voices installed on the phone (Android doesn't say which are female or male; the app recognises known names). */
+    @PluginMethod public void voices(PluginCall call) {
+        JSObject r = new JSObject(); com.getcapacitor.JSArray list = new com.getcapacitor.JSArray();
+        r.put("ready", ttsReady);
+        try {
+            if (tts != null && ttsReady && tts.getVoices() != null) for (android.speech.tts.Voice v : tts.getVoices()) {
+                if (v.getLocale() == null || !"en".equals(v.getLocale().getLanguage())) continue;
+                if (v.getFeatures() != null && v.getFeatures().contains(TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED)) continue;
+                JSObject o = new JSObject();
+                o.put("id", v.getName()); o.put("lang", v.getLocale().toLanguageTag());
+                o.put("local", !v.isNetworkConnectionRequired()); o.put("quality", v.getQuality());
+                list.put(o);
+            }
+            if (tts != null && tts.getVoice() != null) r.put("current", tts.getVoice().getName());
+        } catch (Exception ignored) {}
+        r.put("voices", list); call.resolve(r);
+    }
+
+    @PluginMethod public void setVoice(PluginCall call) {
+        String id = call.getString("id", "");
+        boolean ok = false;
+        try { for (android.speech.tts.Voice v : tts.getVoices()) if (v.getName().equals(id)) { ok = tts.setVoice(v) == TextToSpeech.SUCCESS; break; } } catch (Exception ignored) {}
+        if (ok) StepStore.prefs(getContext()).edit().putString("voiceName", id).apply();
+        JSObject r = new JSObject(); r.put("ok", ok); call.resolve(r);
+    }
 
     @PluginMethod public void status(PluginCall call) {
         JSObject r = new JSObject();
